@@ -1,0 +1,14 @@
+*.Rproj.user
+*.Rhistory
+*.history
+*.RData
+*.DS_Store
+*.aux
+*.blg
+*.log
+*.out
+*.gz
+*.pdf
+*.toc
+*.nav
+*.snm
