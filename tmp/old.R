@@ -11,42 +11,27 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
       sigma.sq = 1
     } else {
       W = as.numeric((X[,1] > threshold[1]) & (X[,2] > threshold[2]))
-      Y.hat = predict(lm(Y ~ X * W))
-      sigma.sq = mean((Y - Y.hat)^2) * length(W) / (length(W) - 6)
+      Y.hat = predict(lm(Y ~ X + W))
+      sigma.sq = mean((Y - Y.hat)^2) * length(W) / (length(W) - 4)
     }
   }
   
-  xx1 = seq(- max.window[1], max.window[1], length.out = num.bucket[1])
-  xx2 = seq(- max.window[2], max.window[2], length.out = num.bucket[2])
+  xx1 = seq(threshold[1] - max.window[1], threshold[1] + max.window[1], length.out = num.bucket[1])
+  xx2 = seq(threshold[2] - max.window[2], threshold[2] + max.window[2], length.out = num.bucket[2])
   
   bin.width = c(xx1[2] - xx1[1], xx2[2] - xx2[1])
   xx12 = expand.grid(xx1, xx2)
   
-  if (!change.derivative) {
-    center.points = which(xx12[,1] %in% xx1[order(abs(xx1))[1:2]] &
-                            xx12[,2] %in% xx2[order(abs(xx2))[1:2]])
-  } else {
-    center.points = which(xx12[,1] %in% xx1[order(abs(xx1))[1:4]] &
-                            xx12[,2] %in% xx2[order(abs(xx2))[1:4]] &
-                            sign(xx12[,1] * xx12[,2] >= 0))
-  }
-  
+  center.points = which(xx12[,1] %in% xx1[order(abs(xx1 - threshold[1]))[1:2]] &
+                          xx12[,2] %in% xx2[order(abs(xx2 - threshold[2]))[1:2]])
   center.mat = matrix(0, length(center.points), nrow(xx12))
   for(iter in 1:length(center.points)) center.mat[iter, center.points[iter]] = 1
   
   # matrix that probes all local second derivatives, along axis and diagonals
-  crit.1 = order(abs(xx1))[1:2]
-  crit.2 = order(abs(xx2))[1:2]
   nabla = matrix(0, 4 * (num.bucket[1] - 2) * (num.bucket[2] - 2), nrow(xx12))
   curr.idx = 0
   for (i1 in 2:(num.bucket[1] - 1)) {
     for (i2 in 2:(num.bucket[2] - 1)) {
-      # If "change.derivative", let f be different on different side of the boundary
-      if (change.derivative &
-          ((i1 %in% crit.1 & i2 >= min(crit.2)) |
-           (i2 %in% crit.2 & i1 >= min(crit.1)))) {
-        next;
-      }
       nabla[curr.idx + 1,  (i1 - 1):(i1 + 1) + (i2 - 1) * num.bucket[1]] = c(1, -2, 1) / bin.width[1]^2
       nabla[curr.idx + 2, i1 + ((i2 - 2):i2) * num.bucket[1]] = c(1, -2, 1) / bin.width[2]^2
       nabla[curr.idx + 3,  (i1 - 1):(i1 + 1) + ((i2 - 2):i2) * num.bucket[1]] = c(1/2, -1, 1/2) / prod(bin.width)
@@ -55,12 +40,8 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
     }
   }
   
-  # If change.derivate, throw away extra rows
-  nabla = nabla[1:curr.idx,]
-  
-  # note the centering at the threshold
   inrange = which(abs(X[,1] - threshold[1]) / max.window[1] < 1 & abs(X[,2] - threshold[2]) / max.window[2] < 1)
-  X.inrange = cbind(X[inrange, 1]  - threshold[1], X[inrange, 2]  - threshold[2])
+  X.inrange = X[inrange,]
   
   breaks1 = c(xx1 - bin.width[1]/2, max(xx1) + bin.width[1]/2)
   breaks2 = c(xx2 - bin.width[2]/2, max(xx2) + bin.width[2]/2)
@@ -109,7 +90,7 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
   #  and then, for a collection of fj...
   #  -sum_k n[k] gamma[k] fj[k] + fj >= 0
   
-  treat = as.numeric(((xx12[realized.idx,1]) < 0) | ((xx12[realized.idx,2]) < 0))
+  treat = as.numeric(((xx12[realized.idx,1] - threshold[1]) > 0) & ((xx12[realized.idx,2] - threshold[2]) > 0))
   
   Dmat = diag(c(X.counts[realized.idx], lambda))
   dvec = rep(0, num.realized + 1)
@@ -177,38 +158,8 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
   gamma = rep(0, length(X))
   gamma[inrange] = gamma.hat[idx.to.bucket]
   
-  max.bias = max.second.derivative * sum(ff * gamma.hat * X.counts)
+  imbalance = max.second.derivative^2 * sum(ff * gamma.hat * X.counts)^2
   
-  # If outcomes are provided, also compute confidence intervals for tau.
-  if (!is.null(Y)) {
-    
-    # The point estimate
-    tau.hat = sum(gamma * Y)
-    
-    # A heteroskedaticity-robust variance estimate
-    regr.df = data.frame(X1=X.inrange[,1], X2=X.inrange[,2], W=treat[idx.to.bucket], Y=Y[inrange])
-    Y.fit = lm(Y ~ W * (X1 + X2), data = regr.df)
-    Y.resid.sq = rep(0, length(Y))
-    Y.resid.sq[inrange] = (Y[inrange] - predict(Y.fit))^2 * sum(inrange) / (sum(inrange) - 6)
-    se.hat.tau = sqrt(sum(Y.resid.sq * gamma^2))
-    
-    # Confidence intervals that account for both bias and variance
-    tau.plusminus = get.plusminus(max.bias, se.hat.tau, alpha)
-  } else {
-    tau.hat = NULL
-    se.hat.tau = sqrt(sigma.sq * sum(gamma^2))
-    tau.plusminus = get.plusminus(max.bias, se.hat.tau, alpha)
-  }
-  
-  ret = list(tau.hat=tau.hat,
-             tau.plusminus=tau.plusminus,
-             alpha=alpha,
-             max.bias = max.bias,
-             sampling.se=se.hat.tau,
-             gamma=gamma,
-             gamma.fun = data.frame(xx1=xx12[realized.idx, 1] + threshold[1],
-                                    xx2=xx12[realized.idx, 2] + threshold[2],
-                                    gamma=gamma.xx[realized.idx]))
-  class(ret) = "optrdd.2d"
+  ret = list(gamma=gamma, gamma.fun = data.frame(xx1=xx12[realized.idx,1], xx2=xx12[realized.idx,2], gamma=gamma.hat[realized.idx]), mean.var = sum(gamma^2), imbalance=imbalance)
   return(ret)
 }
