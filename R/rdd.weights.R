@@ -1,5 +1,4 @@
-
-optrdd = function(X, max.second.derivative, Y = NULL, weights = rep(1, length(X)), threshold = 0, sigma.sq = NULL, change.derivative = FALSE, alpha = 0.95, lambda.mult = 1, max.window = max(abs(X - threshold)), num.bucket = 200) {
+optrdd = function(X, max.second.derivative, Y = NULL, weights = rep(1, length(X)), threshold = 0, sigma.sq = NULL, change.derivative = TRUE, alpha = 0.95, lambda.mult = 1, max.window = max(abs(X - threshold)), num.bucket = 200) {
   
   # Naive initialization for sigma.sq if needed
   if (is.null(sigma.sq)) {
