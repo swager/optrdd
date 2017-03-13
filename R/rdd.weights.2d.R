@@ -16,10 +16,11 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
     }
   }
   
-  xx1 = seq(- max.window[1], max.window[1], length.out = num.bucket[1])
-  xx2 = seq(- max.window[2], max.window[2], length.out = num.bucket[2])
-  
-  bin.width = c(xx1[2] - xx1[1], xx2[2] - xx2[1])
+  breaks1 = seq(- max.window[1], max.window[1], length.out = num.bucket[1] + 1)
+  breaks2 = seq(- max.window[2], max.window[2], length.out = num.bucket[2] + 1)
+  bin.width = c(breaks1[2] - breaks1[1], breaks2[2] - breaks2[1])
+  xx1 = breaks1[-1] - bin.width[1]/2
+  xx2 = breaks2[-1] - bin.width[2]/2
   
   xx12 = expand.grid(xx1, xx2)
   
@@ -69,8 +70,6 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
   inrange = which(abs(X[,1] - threshold[1]) / max.window[1] < 1 & abs(X[,2] - threshold[2]) / max.window[2] < 1)
   X.inrange = cbind(X[inrange, 1]  - threshold[1], X[inrange, 2]  - threshold[2])
   
-  breaks1 = c(xx1 - bin.width[1]/2, max(xx1) + bin.width[1]/2)
-  breaks2 = c(xx2 - bin.width[2]/2, max(xx2) + bin.width[2]/2)
   idx.1 = as.numeric(cut(X.inrange[,1], breaks = breaks1))
   idx.2 = as.numeric(cut(X.inrange[,2], breaks = breaks2))
   
@@ -97,54 +96,50 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
   treat.all = as.numeric(((xx12[,1]) < 0) | ((xx12[,2]) < 0))
   treat = treat.all[realized.idx]
   
+  # If we want to make sure the treated sample is centered, add
+  # 2 extra lagrange parameters to enforce this.
+  cts = as.numeric(center.treated.sample)
+  cts.block = numeric()
+  if (center.treated.sample) {
+    cts.block = rbind((2* treat - 1) * X.mids[realized.idx,1],
+                      (2* treat - 1) * X.mids[realized.idx,2])
+  }
+  
   Dmat = 1/2 * diag(c(1/lambda,
-                    rep(0.000000000001, 10),
+                    rep(0.000000000001, 4 + 2 * cts),
                     X.counts[realized.idx],
-                    rep(0.0000000001/max.second.derivative^2/max(xx12^2), nrow(xx12))))
-  dvec = c(0, 1, -1, rep(0, 8 + length(realized.idx) + nrow(xx12)))
+                    rep(0.00000001 * lambda * max(xx12^2), nrow(xx12))))
+  dvec = c(0, 1, -1, rep(0, 2 + 2 * cts + length(realized.idx) + nrow(xx12)))
   Amat = cbind(rbind(rep(0, length(realized.idx)),
                      1 - treat,
                      treat,
-                     xx12[realized.idx,1],
-                     xx12[realized.idx,2],
                      X.mids[realized.idx,1],
                      X.mids[realized.idx,2],
-                     treat * xx12[realized.idx,1],
-                     treat * xx12[realized.idx,2],
-                     treat * X.mids[realized.idx,1],
-                     treat * X.mids[realized.idx,2],
+                     cts.block,
                      diag(-1, length(realized.idx)),
                      diag(1, nrow(xx12))[,realized.idx]),
                rbind(rep(1, nrow(nabla)),
-                     matrix(0, 10 + length(realized.idx), nrow(nabla)),
+                     matrix(0, 4 + 2 * cts + length(realized.idx), nrow(nabla)),
                      t(nabla)),
                rbind(rep(1, nrow(nabla)),
-                     matrix(0, 10 + length(realized.idx), nrow(nabla)),
+                     matrix(0, 4 + 2 * cts + length(realized.idx), nrow(nabla)),
                      t(-nabla)))
   bvec = rep(0, ncol(Amat))
   meq = length(realized.idx)
-  num.lagrange = 11
-  
-  # We can let the average X for the treated sample float by forcing the
-  # Lagrange parameters corresponding to the treat * X interaction to be 0,
-  # so that they cannot influence the fit
-  if (!center.treated.sample) {
-    Amat = cbind(c(rep(0, 7), 1, 0, 0, 0, rep(0, length(realized.idx) + nrow(xx12))),
-                 c(rep(0, 7), 0, 1, 0, 0, rep(0, length(realized.idx) + nrow(xx12))),
-                 c(rep(0, 7), 0, 0, 1, 0, rep(0, length(realized.idx) + nrow(xx12))),
-                 c(rep(0, 7), 0, 0, 0, 1, rep(0, length(realized.idx) + nrow(xx12))),
-                 Amat)
-    bvec = c(0, 0, 0, 0, bvec)
-    meq = meq + 4
-  }
+  num.lagrange = 5 + 2 * cts
   
   soln = quadprog::solve.QP(Dmat, dvec, Amat, bvec, meq)
   
   gamma.xx = rep(0, nrow(xx12))
   gamma.xx[realized.idx] = -1/2 * soln$solution[num.lagrange + (1:length(realized.idx))]
-  f.dual = soln$solution[num.lagrange + length(realized.idx) + (1:nrow(xx12))]
   
-  # image(xx1, xx2, matrix(f.dual, length(xx1), length(xx2)))
+  ll = soln$solution[1:num.lagrange]
+  f.dual.smooth = soln$solution[num.lagrange + length(realized.idx) + (1:nrow(xx12))]
+  f.dual = f.dual.smooth + ll[2] * (1 - treat.all) + ll[3] * treat.all + X.mids %*% ll[4:5]
+  if(center.treated.sample) {
+    f.dual = f.dual + (2* treat.all - 1) * (X.mids %*% ll[6:7])
+  }
+  image(xx1, xx2, matrix(f.dual, length(xx1), length(xx2)))
   
   gamma = rep(0, length(X))
   gamma[inrange] = gamma.xx[idx.to.bucket]
@@ -154,7 +149,7 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
   
   # Compute the mean X-value for all the treated samples
   tau.center = c(sum(gamma.xx * treat.all * X.mids[,1] * X.counts),
-                 sum(gamma.xx * treat.all * X.mids[,1] * X.counts))
+                 sum(gamma.xx * treat.all * X.mids[,2] * X.counts))
   
   # If outcomes are provided, also compute confidence intervals for tau.
   if (!is.null(Y)) {
