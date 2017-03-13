@@ -95,26 +95,38 @@ optrdd.2d.2 = function(X, max.second.derivative, Y = NULL, weights = NULL, thres
   treat = treat.all[realized.idx]
   
   Dmat = 1/2 * diag(c(1/lambda,
-                    rep(0.000001/lambda, 4),
+                    rep(0.0000000001/lambda, 6),
                     X.counts[realized.idx],
-                    rep(0.0001/max.second.derivative^2/max(xx12^2), nrow(xx12))))
-  dvec = c(0, 1, -1, 0, 0, rep(0, length(realized.idx) + nrow(xx12)))
+                    rep(0.0000000001/max.second.derivative^2/max(xx12^2), nrow(xx12))))
+  dvec = c(0, 1, -1, 0, 0, 0, 0, rep(0, length(realized.idx) + nrow(xx12)))
   Amat = cbind(rbind(rep(0, length(realized.idx)),
                      1 - treat,
                      treat,
                      xx12[realized.idx,1],
                      xx12[realized.idx,2],
+                     treat * xx12[realized.idx,1],
+                     treat * xx12[realized.idx,2],
                      diag(-1, length(realized.idx)),
                      diag(1, nrow(xx12))[,realized.idx]),
                rbind(rep(1, nrow(nabla)),
-                     matrix(0, 4 + length(realized.idx), nrow(nabla)),
+                     matrix(0, 6 + length(realized.idx), nrow(nabla)),
                      t(nabla)),
                rbind(rep(1, nrow(nabla)),
-                     matrix(0, 4 + length(realized.idx), nrow(nabla)),
+                     matrix(0, 6 + length(realized.idx), nrow(nabla)),
                      t(-nabla)))
   bvec = rep(0, ncol(Amat))
   meq = length(realized.idx)
-  num.lagrange = 5
+  num.lagrange = 7
+  
+  # Force the lagrange parameters corresponding to the treat * X interaction to be 0,
+  # so that they cannot influence the fit
+  if (!change.derivative) {
+    Amat = cbind(c(rep(0, 5), 1, 0, rep(0, length(realized.idx) + nrow(xx12))),
+                 c(rep(0, 5), 0, 1, rep(0, length(realized.idx) + nrow(xx12))),
+                 Amat)
+    bvec = c(0, 0, bvec)
+    meq = meq + 2
+  }
   
   soln = quadprog::solve.QP(Dmat, dvec, Amat, bvec, meq)
   
