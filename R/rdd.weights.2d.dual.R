@@ -20,6 +20,7 @@ optrdd.2d.2 = function(X, max.second.derivative, Y = NULL, weights = NULL, thres
   xx2 = seq(- max.window[2], max.window[2], length.out = num.bucket[2])
   
   bin.width = c(xx1[2] - xx1[1], xx2[2] - xx2[1])
+  
   xx12 = expand.grid(xx1, xx2)
   
   if (!change.derivative) {
@@ -36,24 +37,26 @@ optrdd.2d.2 = function(X, max.second.derivative, Y = NULL, weights = NULL, thres
   # matrix that probes all local second derivatives, along axis and diagonals
   crit.1 = order(abs(xx1))[1:2]
   crit.2 = order(abs(xx2))[1:2]
-  nabla = matrix(0, 4 * (num.bucket[1] - 2) * (num.bucket[2] - 2), nrow(xx12))
+  nabla = matrix(0, 4 * length(xx1) * length(xx2), nrow(xx12))
   curr.idx = 0
-  for (i1 in 2:(num.bucket[1] - 1)) {
-    for (i2 in 2:(num.bucket[2] - 1)) {
+  for (i1 in 1:length(xx1)) {
+    for (i2 in 1:length(xx2)) {
       # If "change.derivative", let f be different on different side of the boundary
-      edge.1 = change.derivative & (i1 %in% crit.1 & i2 >= max(crit.2))
-      edge.2 = change.derivative & (i2 %in% crit.2 & i1 >= max(crit.1))
+      edge.1 = (change.derivative & (i1 %in% crit.1 & i2 >= max(crit.2))) |
+        i1 %in% c(1, length(xx1))
+      edge.2 = (change.derivative & (i2 %in% crit.2 & i1 >= max(crit.1))) |
+        i2 %in% c(1, length(xx2))
       if (!edge.1) {
-        nabla[curr.idx + 1,  (i1 - 1):(i1 + 1) + (i2 - 1) * num.bucket[1]] = c(1, -2, 1) / bin.width[1]^2
+        nabla[curr.idx + 1,  (i1 - 1):(i1 + 1) + (i2 - 1) * length(xx1)] = c(1, -2, 1) / bin.width[1]^2
         curr.idx = curr.idx + 1
       }
       if (!edge.2) {
-        nabla[curr.idx + 1, i1 + ((i2 - 2):i2) * num.bucket[1]] = c(1, -2, 1) / bin.width[2]^2
+        nabla[curr.idx + 1, i1 + ((i2 - 2):i2) * length(xx1)] = c(1, -2, 1) / bin.width[2]^2
         curr.idx = curr.idx + 1
       }
       if (!(edge.1 | edge.2)) {
-        nabla[curr.idx + 1,  (i1 - 1):(i1 + 1) + ((i2 - 2):i2) * num.bucket[1]] = c(1/2, -1, 1/2) / prod(bin.width)
-        nabla[curr.idx + 2,  (i1 - 1):(i1 + 1) + (i2:(i2 - 2)) * num.bucket[1]] = c(1/2, -1, 1/2) / prod(bin.width)
+        nabla[curr.idx + 1,  (i1 - 1):(i1 + 1) + ((i2 - 2):i2) * length(xx1)] = c(1/2, -1, 1/2) / prod(bin.width)
+        nabla[curr.idx + 2,  (i1 - 1):(i1 + 1) + (i2:(i2 - 2)) * length(xx1)] = c(1/2, -1, 1/2) / prod(bin.width)
         curr.idx = curr.idx + 2
       }
     }
@@ -71,7 +74,7 @@ optrdd.2d.2 = function(X, max.second.derivative, Y = NULL, weights = NULL, thres
   idx.1 = as.numeric(cut(X.inrange[,1], breaks = breaks1))
   idx.2 = as.numeric(cut(X.inrange[,2], breaks = breaks2))
   
-  idx.to.bucket = sapply(1:nrow(X.inrange), function(iter) idx.1[iter] + (idx.2[iter] - 1) * num.bucket[1])
+  idx.to.bucket = sapply(1:nrow(X.inrange), function(iter) idx.1[iter] + (idx.2[iter] - 1) * length(xx1))
   X.counts = sapply(1:nrow(xx12), function(iter) sum(idx.to.bucket==iter))
   
   X.mids = t(sapply(1:nrow(xx12),function(iter) {
@@ -95,37 +98,43 @@ optrdd.2d.2 = function(X, max.second.derivative, Y = NULL, weights = NULL, thres
   treat = treat.all[realized.idx]
   
   Dmat = 1/2 * diag(c(1/lambda,
-                    rep(0.0000000001/lambda, 6),
+                    rep(0.000000000001, 10),
                     X.counts[realized.idx],
                     rep(0.0000000001/max.second.derivative^2/max(xx12^2), nrow(xx12))))
-  dvec = c(0, 1, -1, 0, 0, 0, 0, rep(0, length(realized.idx) + nrow(xx12)))
+  dvec = c(0, 1, -1, rep(0, 8 + length(realized.idx) + nrow(xx12)))
   Amat = cbind(rbind(rep(0, length(realized.idx)),
                      1 - treat,
                      treat,
                      xx12[realized.idx,1],
                      xx12[realized.idx,2],
+                     X.mids[realized.idx,1],
+                     X.mids[realized.idx,2],
                      treat * xx12[realized.idx,1],
                      treat * xx12[realized.idx,2],
+                     treat * X.mids[realized.idx,1],
+                     treat * X.mids[realized.idx,2],
                      diag(-1, length(realized.idx)),
                      diag(1, nrow(xx12))[,realized.idx]),
                rbind(rep(1, nrow(nabla)),
-                     matrix(0, 6 + length(realized.idx), nrow(nabla)),
+                     matrix(0, 10 + length(realized.idx), nrow(nabla)),
                      t(nabla)),
                rbind(rep(1, nrow(nabla)),
-                     matrix(0, 6 + length(realized.idx), nrow(nabla)),
+                     matrix(0, 10 + length(realized.idx), nrow(nabla)),
                      t(-nabla)))
   bvec = rep(0, ncol(Amat))
   meq = length(realized.idx)
-  num.lagrange = 7
+  num.lagrange = 11
   
   # Force the lagrange parameters corresponding to the treat * X interaction to be 0,
   # so that they cannot influence the fit
   if (!change.derivative) {
-    Amat = cbind(c(rep(0, 5), 1, 0, rep(0, length(realized.idx) + nrow(xx12))),
-                 c(rep(0, 5), 0, 1, rep(0, length(realized.idx) + nrow(xx12))),
+    Amat = cbind(c(rep(0, 7), 1, 0, 0, 0, rep(0, length(realized.idx) + nrow(xx12))),
+                 c(rep(0, 7), 0, 1, 0, 0, rep(0, length(realized.idx) + nrow(xx12))),
+                 c(rep(0, 7), 0, 0, 1, 0, rep(0, length(realized.idx) + nrow(xx12))),
+                 c(rep(0, 7), 0, 0, 0, 1, rep(0, length(realized.idx) + nrow(xx12))),
                  Amat)
-    bvec = c(0, 0, bvec)
-    meq = meq + 2
+    bvec = c(0, 0, 0, 0, bvec)
+    meq = meq + 4
   }
   
   soln = quadprog::solve.QP(Dmat, dvec, Amat, bvec, meq)
@@ -133,6 +142,8 @@ optrdd.2d.2 = function(X, max.second.derivative, Y = NULL, weights = NULL, thres
   gamma.xx = rep(0, nrow(xx12))
   gamma.xx[realized.idx] = -1/2 * soln$solution[num.lagrange + (1:length(realized.idx))]
   f.dual = soln$solution[num.lagrange + length(realized.idx) + (1:nrow(xx12))]
+  
+  # image(xx1, xx2, matrix(f.dual, length(xx1), length(xx2)))
   
   gamma = rep(0, length(X))
   gamma[inrange] = gamma.xx[idx.to.bucket]
