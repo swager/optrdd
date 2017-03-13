@@ -17,6 +17,10 @@ print.optrdd = function(obj) {
   }
 }
 
+summary.optrdd = function(obj) {
+  unlist(obj)[1:7]
+}
+
 print.optrdd.2d = function(obj) {
   print.optrdd(obj)
 }
@@ -32,5 +36,9 @@ plot.optrdd.2d = function(obj, xlab = "x1", ylab = "x2") {
   segments(2*max(obj$gamma.fun[,1]), 0, 0, 0)
   segments(0, 0, 0, 2*max(obj$gamma.fun[,2]))
   points(obj$tau.center[1], obj$tau.center[2], pch = 4, cex = 1.5, lwd = 3)
+}
+
+summary.optrdd.2d = function(obj) {
+  summary.optrdd(obj)
 }
   
