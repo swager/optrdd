@@ -143,6 +143,8 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
   curr.value = 0
   worst = rep(0, nrow(xx12))
   
+  lp.fail = FALSE
+  
   for (iter in 1:100) {
     
     # Solve the problem while balancing the current dictionary of f-functions
@@ -153,22 +155,38 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
     gamma.hat[realized.idx] = soln$solution[1:num.realized]
     objective.in = gamma.hat * X.counts
     
-    SCL = max(rowSums(xx12^2))/2
-    # Need to separate f into positive part and negative part, because
-    # lpSolve only gives positive solutions
-    worst.perturbation = lpSolve::lp(direction="max",
-                            objective.in = c(objective.in, -objective.in),
-                            const.mat = rbind(
-                              cbind(center.mat, matrix(0, nrow(center.mat), ncol(center.mat))),
-                              cbind(matrix(0, nrow(center.mat), ncol(center.mat)), center.mat),
-                              cbind(nabla, -nabla) * SCL, cbind(-nabla, nabla) * SCL),
-                            const.dir = c(rep("=", 2 * nrow(center.mat)),
-                                          rep("<=", 2 * nrow(nabla))),
-                            const.rhs =  c(rep(0, 2 * nrow(center.mat)),
-                                           rep(1, 2 * nrow(nabla))))
-    
     nv = length(objective.in)
-    worst = (worst.perturbation$solution[1:nv] - worst.perturbation$solution[nv + (1:nv)]) * SCL
+    
+    if(!lp.fail) {
+      SCL = max(rowSums(xx12^2))/2
+      # Need to separate f into positive part and negative part, because
+      # lpSolve only gives positive solutions
+      worst.perturbation = lpSolve::lp(direction="max",
+                                       c(objective.in, -objective.in),
+                                       const.mat = rbind(
+                                         cbind(center.mat, matrix(0, nrow(center.mat), nv)),
+                                         cbind(matrix(0, nrow(center.mat), nv), center.mat),
+                                         cbind(nabla, -nabla), cbind(-nabla, nabla), rep(1, 2 * nv)),
+                                       const.dir = c(rep("=", 2 * nrow(center.mat)),
+                                                     rep("<=", 2 * nrow(nabla) + 1)),
+                                       const.rhs =  c(rep(0, 2 * nrow(center.mat)),
+                                                      rep(1/SCL, 2 * nrow(nabla)), 2 * nv))
+      worst = (worst.perturbation$solution[1:nv] - worst.perturbation$solution[nv + (1:nv)]) * SCL
+      
+      if (worst.perturbation$status != 0) {
+        lp.fail = TRUE
+        print("LP failed, used QP from now on...")
+      }
+    }
+    
+    if (lp.fail) {
+      worst.pertubation = quadprog::solve.QP(diag(lambda / 100, nv),
+                                             objective.in,
+                                             t(rbind(center.mat, nabla, -nabla)),
+                                             c(rep(0, nrow(center.mat)), rep(-1, 2 * nrow(nabla))),
+                                             meq = 1)
+      worst = worst.pertubation$solution
+    }
     
     # Break once the worst bias over the {f}-class essentially matches
     # the actual worst-case bias over the regularity class
