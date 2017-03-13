@@ -1,4 +1,4 @@
-optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, threshold = c(0, 0), sigma.sq = NULL, change.derivative = TRUE, alpha = 0.95, lambda.mult = 1, max.window = c(max(abs(X[,1] - threshold[1])), max(abs(X[,2] - threshold[2]))), num.bucket = c(20, 20)) {
+optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, threshold = c(0, 0), sigma.sq = NULL, estimate.cate.at.point = FALSE, center.treated.sample = FALSE, alpha = 0.95, lambda.mult = 1, max.window = c(max(abs(X[,1] - threshold[1])), max(abs(X[,2] - threshold[2]))), num.bucket = c(20, 20)) {
   
   if (ncol(X) != 2) { stop("The running variable must be bivariate") }
   
@@ -23,7 +23,7 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
   
   xx12 = expand.grid(xx1, xx2)
   
-  if (!change.derivative) {
+  if (!estimate.cate.at.point) {
     center.points = which(xx12[,1] %in% xx1[order(abs(xx1))[1:2]] &
                             xx12[,2] %in% xx2[order(abs(xx2))[1:2]])
   } else {
@@ -41,10 +41,10 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
   curr.idx = 0
   for (i1 in 1:length(xx1)) {
     for (i2 in 1:length(xx2)) {
-      # If "change.derivative", let f be different on different side of the boundary
-      edge.1 = (change.derivative & (i1 %in% crit.1 & i2 >= max(crit.2))) |
+      # If "estimate.cate.at.point", let f be different on different side of the boundary
+      edge.1 = (estimate.cate.at.point & (i1 %in% crit.1 & i2 >= max(crit.2))) |
         i1 %in% c(1, length(xx1))
-      edge.2 = (change.derivative & (i2 %in% crit.2 & i1 >= max(crit.1))) |
+      edge.2 = (estimate.cate.at.point & (i2 %in% crit.2 & i1 >= max(crit.1))) |
         i2 %in% c(1, length(xx2))
       if (!edge.1) {
         nabla[curr.idx + 1,  (i1 - 1):(i1 + 1) + (i2 - 1) * length(xx1)] = c(1, -2, 1) / bin.width[1]^2
@@ -125,9 +125,10 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
   meq = length(realized.idx)
   num.lagrange = 11
   
-  # Force the lagrange parameters corresponding to the treat * X interaction to be 0,
+  # We can let the average X for the treated sample float by forcing the
+  # Lagrange parameters corresponding to the treat * X interaction to be 0,
   # so that they cannot influence the fit
-  if (!change.derivative) {
+  if (!center.treated.sample) {
     Amat = cbind(c(rep(0, 7), 1, 0, 0, 0, rep(0, length(realized.idx) + nrow(xx12))),
                  c(rep(0, 7), 0, 1, 0, 0, rep(0, length(realized.idx) + nrow(xx12))),
                  c(rep(0, 7), 0, 0, 1, 0, rep(0, length(realized.idx) + nrow(xx12))),
@@ -148,7 +149,12 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
   gamma = rep(0, length(X))
   gamma[inrange] = gamma.xx[idx.to.bucket]
   
+  # Bound on the worst-case bias
   max.bias = max.second.derivative * max(abs(nabla %*% f.dual))
+  
+  # Compute the mean X-value for all the treated samples
+  tau.center = c(sum(gamma.xx * treat.all * X.mids[,1] * X.counts),
+                 sum(gamma.xx * treat.all * X.mids[,1] * X.counts))
   
   # If outcomes are provided, also compute confidence intervals for tau.
   if (!is.null(Y)) {
@@ -174,12 +180,13 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
   ret = list(tau.hat=tau.hat,
              tau.plusminus=tau.plusminus,
              alpha=alpha,
-             max.bias = max.bias,
+             max.bias=max.bias,
              sampling.se=se.hat.tau,
+             tau.center=tau.center,
              gamma=gamma,
-             gamma.fun = data.frame(xx1=xx12[realized.idx, 1] + threshold[1],
-                                    xx2=xx12[realized.idx, 2] + threshold[2],
-                                    gamma=gamma.xx[realized.idx]))
+             gamma.fun=data.frame(xx1=xx12[realized.idx, 1] + threshold[1],
+                                  xx2=xx12[realized.idx, 2] + threshold[2],
+                                  gamma=gamma.xx[realized.idx]))
   class(ret) = "optrdd.2d"
   return(ret)
 }
