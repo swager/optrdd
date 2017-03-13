@@ -27,8 +27,7 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
                             xx12[,2] %in% xx2[order(abs(xx2))[1:2]])
   } else {
     center.points = which(xx12[,1] %in% xx1[order(abs(xx1))[1:4]] &
-                            xx12[,2] %in% xx2[order(abs(xx2))[1:4]] &
-                            sign(xx12[,1] * xx12[,2] >= 0))
+                            xx12[,2] %in% xx2[order(abs(xx2))[1:4]])
   }
   
   center.mat = matrix(0, length(center.points), nrow(xx12))
@@ -42,16 +41,21 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
   for (i1 in 2:(num.bucket[1] - 1)) {
     for (i2 in 2:(num.bucket[2] - 1)) {
       # If "change.derivative", let f be different on different side of the boundary
-      if (change.derivative &
-          ((i1 %in% crit.1 & i2 >= min(crit.2)) |
-           (i2 %in% crit.2 & i1 >= min(crit.1)))) {
-        next;
+      edge.1 = change.derivative & (i1 %in% crit.1 & i2 >= max(crit.2))
+      edge.2 = change.derivative & (i2 %in% crit.2 & i1 >= max(crit.1))
+      if (!edge.1) {
+        nabla[curr.idx + 1,  (i1 - 1):(i1 + 1) + (i2 - 1) * num.bucket[1]] = c(1, -2, 1) / bin.width[1]^2
+        curr.idx = curr.idx + 1
       }
-      nabla[curr.idx + 1,  (i1 - 1):(i1 + 1) + (i2 - 1) * num.bucket[1]] = c(1, -2, 1) / bin.width[1]^2
-      nabla[curr.idx + 2, i1 + ((i2 - 2):i2) * num.bucket[1]] = c(1, -2, 1) / bin.width[2]^2
-      nabla[curr.idx + 3,  (i1 - 1):(i1 + 1) + ((i2 - 2):i2) * num.bucket[1]] = c(1/2, -1, 1/2) / prod(bin.width)
-      nabla[curr.idx + 4,  (i1 - 1):(i1 + 1) + (i2:(i2 - 2)) * num.bucket[1]] = c(1/2, -1, 1/2) / prod(bin.width)
-      curr.idx = curr.idx + 4
+      if (!edge.2) {
+        nabla[curr.idx + 1, i1 + ((i2 - 2):i2) * num.bucket[1]] = c(1, -2, 1) / bin.width[2]^2
+        curr.idx = curr.idx + 1
+      }
+      if (!(edge.1 | edge.2)) {
+        nabla[curr.idx + 1,  (i1 - 1):(i1 + 1) + ((i2 - 2):i2) * num.bucket[1]] = c(1/2, -1, 1/2) / prod(bin.width)
+        nabla[curr.idx + 2,  (i1 - 1):(i1 + 1) + (i2:(i2 - 2)) * num.bucket[1]] = c(1/2, -1, 1/2) / prod(bin.width)
+        curr.idx = curr.idx + 2
+      }
     }
   }
   
@@ -109,7 +113,8 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
   #  and then, for a collection of fj...
   #  -sum_k n[k] gamma[k] fj[k] + fj >= 0
   
-  treat = as.numeric(((xx12[realized.idx,1]) < 0) | ((xx12[realized.idx,2]) < 0))
+  treat.all = as.numeric(((xx12[,1]) < 0) | ((xx12[,2]) < 0))
+  treat = treat.all[realized.idx]
   
   Dmat = diag(c(X.counts[realized.idx], lambda))
   dvec = rep(0, num.realized + 1)
@@ -136,6 +141,7 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
   }
   
   curr.value = 0
+  worst = rep(0, nrow(xx12))
   
   for (iter in 1:100) {
     
@@ -147,26 +153,37 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
     gamma.hat[realized.idx] = soln$solution[1:num.realized]
     objective.in = gamma.hat * X.counts
     
+    SCL = max(rowSums(xx12^2))/2
+    # Need to separate f into positive part and negative part, because
+    # lpSolve only gives positive solutions
     worst.perturbation = lpSolve::lp(direction="max",
-                            objective.in = objective.in,
-                            const.mat = rbind(center.mat, nabla, -nabla),
-                            const.dir = c(rep("=", nrow(center.mat)),
-                                          rep("<=", 2*nrow(nabla))),
-                            const.rhs =  c(rep(0, nrow(center.mat)),
-                                           rep(1, 2*nrow(nabla))))
-    ff = (worst.perturbation$solution - mean(worst.perturbation$solution))
+                            objective.in = c(objective.in, -objective.in),
+                            const.mat = rbind(
+                              cbind(center.mat, matrix(0, nrow(center.mat), ncol(center.mat))),
+                              cbind(matrix(0, nrow(center.mat), ncol(center.mat)), center.mat),
+                              cbind(nabla, -nabla) * SCL, cbind(-nabla, nabla) * SCL),
+                            const.dir = c(rep("=", 2 * nrow(center.mat)),
+                                          rep("<=", 2 * nrow(nabla))),
+                            const.rhs =  c(rep(0, 2 * nrow(center.mat)),
+                                           rep(1, 2 * nrow(nabla))))
+    
+    nv = length(objective.in)
+    worst = (worst.perturbation$solution[1:nv] - worst.perturbation$solution[nv + (1:nv)]) * SCL
     
     # Break once the worst bias over the {f}-class essentially matches
     # the actual worst-case bias over the regularity class
     claimed_worst_case_bias = soln$solution[num.realized + 1]
-    actual_worst_case_bias = sum(X.counts[realized.idx] * ff[realized.idx] * gamma.hat[realized.idx])
+    actual_worst_case_bias = sum(X.counts[realized.idx] * worst[realized.idx] * gamma.hat[realized.idx])
     print(paste(claimed_worst_case_bias, " --- " , actual_worst_case_bias))
-    if (claimed_worst_case_bias / actual_worst_case_bias > 0.99 & iter >= 3) break;
+    if ((iter >= 3 & claimed_worst_case_bias / actual_worst_case_bias > 0.99) |
+        (iter >= 10 & claimed_worst_case_bias / actual_worst_case_bias > 0.95)) break;
     
-    image(xx1, xx2, matrix(ff, length(xx1), length(xx2)))
+    image(xx1, xx2, matrix(worst, length(xx1), length(xx2)))
+    abline(h=0)
+    abline(v=0)
     
     # Add this function to the collection, so that the gamma_i balance it too
-    Amat = cbind(Amat, c(-X.counts[realized.idx] * ff[realized.idx], 1))
+    Amat = cbind(Amat, c(-X.counts[realized.idx] * worst[realized.idx], 1))
     bvec = c(bvec, 0)
   }
   
@@ -177,7 +194,7 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
   gamma = rep(0, length(X))
   gamma[inrange] = gamma.hat[idx.to.bucket]
   
-  max.bias = max.second.derivative * sum(ff * gamma.hat * X.counts)
+  max.bias = max.second.derivative * sum(worst * gamma.hat * X.counts)
   
   # If outcomes are provided, also compute confidence intervals for tau.
   if (!is.null(Y)) {
@@ -186,10 +203,10 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
     tau.hat = sum(gamma * Y)
     
     # A heteroskedaticity-robust variance estimate
-    regr.df = data.frame(X1=X.inrange[,1], X2=X.inrange[,2], W=treat[idx.to.bucket], Y=Y[inrange])
+    regr.df = data.frame(X1=X.inrange[,1], X2=X.inrange[,2], W=treat.all[idx.to.bucket], Y=Y[inrange])
     Y.fit = lm(Y ~ W * (X1 + X2), data = regr.df)
     Y.resid.sq = rep(0, length(Y))
-    Y.resid.sq[inrange] = (Y[inrange] - predict(Y.fit))^2 * sum(inrange) / (sum(inrange) - 6)
+    Y.resid.sq[inrange] = (Y[inrange] - predict(Y.fit))^2 * length(inrange) / (length(inrange) - 6)
     se.hat.tau = sqrt(sum(Y.resid.sq * gamma^2))
     
     # Confidence intervals that account for both bias and variance

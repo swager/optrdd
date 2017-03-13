@@ -16,4 +16,8 @@ print.optrdd = function(obj) {
     print(paste0(100 * obj$alpha, "% CI for tau: [point estimate] +/- ", signif(obj$tau.plusminus, 2)))
   }
 }
+
+print.optrdd.2d = function(obj) {
+  print.optrdd(obj)
+}
   
