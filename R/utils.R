@@ -29,7 +29,7 @@ plot.optrdd.2d = function(obj, xlab = "x1", ylab = "x2") {
   if (!requireNamespace("RColorBrewer", quietly = TRUE)) {
     stop("RColorBrewer needed for this function to work. Please install it.", call. = FALSE)
   }
-  gamma.xx = obj$gamma.fun[,3]
+  gamma.xx = -obj$gamma.fun[,3]
   cidx = 51 + round(50 * gamma.xx / max(abs(gamma.xx)))
   hc = colorRampPalette(RColorBrewer::brewer.pal(11, "RdBu"))(101)
   plot(obj$gamma.fun[,1:2], col = hc[cidx], pch = 16, xlab = xlab, ylab = ylab)
