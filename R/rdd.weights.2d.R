@@ -24,13 +24,16 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
   
   xx12 = expand.grid(xx1, xx2)
   
-  if (!estimate.cate.at.point) {
-    center.points = which(xx12[,1] %in% xx1[order(abs(xx1))[1:2]] &
-                            xx12[,2] %in% xx2[order(abs(xx2))[1:2]])
-  } else {
-    center.points = which(xx12[,1] %in% xx1[order(abs(xx1))[1:4]] &
-                            xx12[,2] %in% xx2[order(abs(xx2))[1:4]])
-  }
+  # if (!estimate.cate.at.point) {
+  #   center.points = which(xx12[,1] %in% xx1[order(abs(xx1))[1:2]] &
+  #                           xx12[,2] %in% xx2[order(abs(xx2))[1:2]])
+  # } else {
+  #   center.points = which(xx12[,1] %in% xx1[order(abs(xx1))[1:4]] &
+  #                           xx12[,2] %in% xx2[order(abs(xx2))[1:4]])
+  # }
+
+  center.points = which(xx12[,1] %in% xx1[c(1, 2, length(xx1) - (1:0))] &
+                          xx12[,2] %in% xx2[c(1, 2, length(xx2) - (1:0))])
   
   center.mat = matrix(0, length(center.points), nrow(xx12))
   for(iter in 1:length(center.points)) center.mat[iter, center.points[iter]] = 1
@@ -105,10 +108,10 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
                       (2* treat - 1) * X.mids[realized.idx,2])
   }
   
-  Dmat = 1/2 * diag(c(1/lambda,
-                    rep(0.000000000001, 4 + 2 * cts),
-                    X.counts[realized.idx],
-                    rep(0.00000001 * lambda * max(xx12^2), nrow(xx12))))
+  Dmat = diag(c(2 * lambda.mult,
+                    rep(0.00000001, 4 + 2 * cts),
+                    1/2 * X.counts[realized.idx] / sigma.sq,
+                    rep(0.00000001, nrow(xx12))))
   dvec = c(0, 1, -1, rep(0, 2 + 2 * cts + length(realized.idx) + nrow(xx12)))
   Amat = cbind(rbind(rep(0, length(realized.idx)),
                      1 - treat,
@@ -117,7 +120,7 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
                      X.mids[realized.idx,2],
                      cts.block,
                      diag(-1, length(realized.idx)),
-                     diag(1, nrow(xx12))[,realized.idx]),
+                     diag(2 * max.second.derivative, nrow(xx12))[,realized.idx]),
                rbind(rep(1, nrow(nabla)),
                      matrix(0, 4 + 2 * cts + length(realized.idx), nrow(nabla)),
                      t(nabla)),
@@ -128,10 +131,28 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
   meq = length(realized.idx)
   num.lagrange = 5 + 2 * cts
   
+  # Although these constraints are in principle taken care of by the Lagrangians,
+  # they are not always numerically enforced. Enforce again, because they are important.
+  # Cmat = cbind(c(rep(0, num.lagrange),
+  #                X.counts[realized.idx],
+  #                rep(0, nrow(xx12))),
+  #              c(rep(0, num.lagrange),
+  #                (2 * treat - 1) * X.counts[realized.idx],
+  #                rep(0, nrow(xx12))),
+  #              c(rep(0, num.lagrange),
+  #                X.mids[realized.idx,1] * X.counts[realized.idx],
+  #                rep(0, nrow(xx12))),
+  #              c(rep(0, num.lagrange),
+  #                X.mids[realized.idx,2] * X.counts[realized.idx],
+  #                rep(0, nrow(xx12))))
+  # Amat = cbind(Cmat, Amat)
+  # bvec = c(0, -4, 0, 0, bvec) # note the -1/2 factor in defining gamma
+  # meq = meq + 4
+  
   soln = quadprog::solve.QP(Dmat, dvec, Amat, bvec, meq)
   
   gamma.xx = rep(0, nrow(xx12))
-  gamma.xx[realized.idx] = -1/2 * soln$solution[num.lagrange + (1:length(realized.idx))]
+  gamma.xx[realized.idx] = -1 / (2 * sigma.sq) * soln$solution[num.lagrange + (1:length(realized.idx))]
   
   ll = soln$solution[1:num.lagrange]
   f.dual.smooth = soln$solution[num.lagrange + length(realized.idx) + (1:nrow(xx12))]
@@ -139,13 +160,14 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
   if(center.treated.sample) {
     f.dual = f.dual + (2* treat.all - 1) * (X.mids %*% ll[6:7])
   }
-  image(xx1, xx2, matrix(f.dual, length(xx1), length(xx2)))
+  image(xx1, xx2, matrix(f.dual * (X.counts > 0), length(xx1), length(xx2)))
+  image(xx1, xx2, matrix(f.dual.smooth, length(xx1), length(xx2)))
   
   gamma = rep(0, length(X))
   gamma[inrange] = gamma.xx[idx.to.bucket]
   
   # Bound on the worst-case bias
-  max.bias = max.second.derivative * max(abs(nabla %*% f.dual))
+  max.bias = max(abs(nabla %*% f.dual.smooth))
   
   # Compute the mean X-value for all the treated samples
   tau.center = c(sum(gamma.xx * treat.all * X.mids[,1] * X.counts),
@@ -181,7 +203,10 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
              gamma=gamma,
              gamma.fun=data.frame(xx1=xx12[realized.idx, 1] + threshold[1],
                                   xx2=xx12[realized.idx, 2] + threshold[2],
-                                  gamma=gamma.xx[realized.idx]))
+                                  gamma=gamma.xx[realized.idx]),
+             influence.fun=data.frame(xx1=xx12[realized.idx, 1] + threshold[1],
+                                  xx2=xx12[realized.idx, 2] + threshold[2],
+                                  gamma=gamma.xx[realized.idx] * X.counts[realized.idx]))
   class(ret) = "optrdd.2d"
   return(ret)
 }
