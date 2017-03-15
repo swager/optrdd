@@ -38,7 +38,7 @@ llr = function(X, max.second.derivative, bandwidth = NULL, Y = NULL, weights = r
   if (!is.null(bandwidth)) {
     bw.vec = bandwidth
   } else {
-    bw.vec = c(1:20) * max.window / 20
+    bw.vec = c(1:40) * max.window / 40
   }
   
   soln.vec = lapply(bw.vec, function(bw) {
@@ -47,7 +47,7 @@ llr = function(X, max.second.derivative, bandwidth = NULL, Y = NULL, weights = r
     realized.idx = which((X.counts > 0) & (abs(xx) < bw))
     num.realized = length(realized.idx)
     
-    if (num.realized < 4) return(list(max.mse=NA, max.bias=NA, gamma.xx=NA, realized.idx=NA))
+    if (num.realized < 4) return(list(max.mse=NA, max.bias=NA, homosk.plusminus=NA, gamma.xx=NA, realized.idx=NA))
     
     # This optimizer learns bucket-wise gammas. Let k denote
     # the bucket index, n[k] the number of observations in
@@ -70,35 +70,39 @@ llr = function(X, max.second.derivative, bandwidth = NULL, Y = NULL, weights = r
     dvec = rep(0, num.realized)
     
     Amat = cbind(X.counts[realized.idx],
-                 X.counts[realized.idx] * sign(xx[realized.idx] - threshold),
+                 X.counts[realized.idx] * sign(xx[realized.idx]),
                  X.counts[realized.idx] * xx[realized.idx])
     
     if(!change.derivative) {
       bvec = c(0, 2, 0)
       meq = 3
     } else {
-      Amat = cbind(Amat, X.counts[realized.idx] * pmax(xx[realized.idx] - threshold, 0))
+      Amat = cbind(Amat, X.counts[realized.idx] * pmax(xx[realized.idx], 0))
       bvec = c(0, 2, 0, 0)
       meq = 4
     }
     
-    soln = solve.QP(Dmat, dvec, Amat, bvec, meq)$solution
+    soln = quadprog::solve.QP(Dmat, dvec, Amat, bvec, meq)$solution
     
     gamma.xx = rep(0, num.bucket)
     gamma.xx[realized.idx] = soln[1:num.realized]
     max.bias = max.second.derivative * sum(abs(t(M2) %*% (X.counts * gamma.xx)))
-    max.mse = max.bias^2 + sigma.sq * sum(X.counts[realized.idx] * gamma.xx[realized.idx]^2)
+    sigma.hat.homosk = sqrt(sigma.sq * sum(X.counts[realized.idx] * gamma.xx[realized.idx]^2))
+    max.mse = max.bias^2 + sigma.hat.homosk^2
+    homosk.plusminus = get.plusminus(max.bias, sigma.hat.homosk, alpha)
     
     return(list(max.mse=max.mse,
                max.bias=max.bias,
+               homosk.plusminus=homosk.plusminus,
                gamma.xx=gamma.xx,
                realized.idx=realized.idx))
   })
   
   # pick out the best soln
-  max.mses = unlist(sapply(soln.vec, function(vv) vv[[1]]))
-  gamma.xx = soln.vec[[which.min(max.mses)]]$gamma.xx
-  realized.idx = soln.vec[[which.min(max.mses)]]$realized.idx
+  plusmin = unlist(sapply(soln.vec, function(vv) vv$homosk.plusminus))
+  opt.idx = which.min(plusmin)
+  gamma.xx = soln.vec[[opt.idx]]$gamma.xx
+  realized.idx = soln.vec[[opt.idx]]$realized.idx
   
   # Now map this x-wise function into a weight for each observation
   gamma = rep(0, length(X))
@@ -133,6 +137,7 @@ llr = function(X, max.second.derivative, bandwidth = NULL, Y = NULL, weights = r
              alpha=alpha,
              max.bias = max.bias,
              sampling.se=se.hat.tau,
+             bandwidth=bw.vec[opt.idx],
              gamma=gamma,
              gamma.fun = data.frame(xx=xx[realized.idx] + threshold,
                                     gamma=gamma.xx[realized.idx]))
