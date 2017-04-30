@@ -1,4 +1,17 @@
-llr = function(X, max.second.derivative, bandwidth = NULL, Y = NULL, num.samples = rep(1, length(X)), threshold = 0, sigma.sq = NULL, change.derivative = TRUE, alpha = 0.95, max.window = max(abs(X - threshold)), num.bucket = 200, kernel = c("rectangular", "triangular"), minimization.target = c("mse", "ci.length"), use.homoskedatic.variance = FALSE) {
+llr = function(X,
+               max.second.derivative,
+               bandwidth = NULL,
+               Y = NULL,
+               num.samples = rep(1, length(X)), 
+               threshold = 0,
+               sigma.sq = NULL,
+               change.derivative = TRUE,
+               alpha = 0.95,
+               max.window = max(abs(X - threshold)),
+               num.bucket = 200,
+               kernel = c("rectangular", "triangular"),
+               minimization.target = c("mse", "ci.length"),
+               use.homoskedatic.variance = FALSE) {
   
   kernel = match.arg(kernel)
   minimization.target = match.arg(minimization.target)
