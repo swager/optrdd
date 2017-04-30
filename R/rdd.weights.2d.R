@@ -1,8 +1,6 @@
-optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, threshold = c(0, 0), sigma.sq = NULL, estimate.cate.at.point = FALSE, center.treated.sample = FALSE, alpha = 0.95, lambda.mult = 1, max.window = c(max(abs(X[,1] - threshold[1])), max(abs(X[,2] - threshold[2]))), num.bucket = c(20, 20)) {
+optrdd.2d = function(X, max.second.derivative, Y = NULL, threshold = c(0, 0), sigma.sq = NULL, estimate.cate.at.point = FALSE, center.treated.sample = FALSE, alpha = 0.95, lambda.mult = 1, max.window = c(max(abs(X[,1] - threshold[1])), max(abs(X[,2] - threshold[2]))), num.bucket = c(20, 20)) {
   
   if (ncol(X) != 2) { stop("The running variable must be bivariate") }
-  
-  if (!is.null(weights)) { stop("Weighted version of optrdd.2d not implemented.") }
   
   # Naive initialization for sigma.sq if needed
   if (is.null(sigma.sq)) {
@@ -24,14 +22,6 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
   
   xx12 = expand.grid(xx1, xx2)
   
-  # if (!estimate.cate.at.point) {
-  #   center.points = which(xx12[,1] %in% xx1[order(abs(xx1))[1:2]] &
-  #                           xx12[,2] %in% xx2[order(abs(xx2))[1:2]])
-  # } else {
-  #   center.points = which(xx12[,1] %in% xx1[order(abs(xx1))[1:4]] &
-  #                           xx12[,2] %in% xx2[order(abs(xx2))[1:4]])
-  # }
-
   center.points = which(xx12[,1] %in% xx1[c(1, 2, length(xx1) - (1:0))] &
                           xx12[,2] %in% xx2[c(1, 2, length(xx2) - (1:0))])
   
@@ -130,24 +120,6 @@ optrdd.2d = function(X, max.second.derivative, Y = NULL, weights = NULL, thresho
   bvec = rep(0, ncol(Amat))
   meq = length(realized.idx)
   num.lagrange = 5 + 2 * cts
-  
-  # Although these constraints are in principle taken care of by the Lagrangians,
-  # they are not always numerically enforced. Enforce again, because they are important.
-  # Cmat = cbind(c(rep(0, num.lagrange),
-  #                X.counts[realized.idx],
-  #                rep(0, nrow(xx12))),
-  #              c(rep(0, num.lagrange),
-  #                (2 * treat - 1) * X.counts[realized.idx],
-  #                rep(0, nrow(xx12))),
-  #              c(rep(0, num.lagrange),
-  #                X.mids[realized.idx,1] * X.counts[realized.idx],
-  #                rep(0, nrow(xx12))),
-  #              c(rep(0, num.lagrange),
-  #                X.mids[realized.idx,2] * X.counts[realized.idx],
-  #                rep(0, nrow(xx12))))
-  # Amat = cbind(Cmat, Amat)
-  # bvec = c(0, -4, 0, 0, bvec) # note the -1/2 factor in defining gamma
-  # meq = meq + 4
   
   soln = quadprog::solve.QP(Dmat, dvec, Amat, bvec, meq)
   

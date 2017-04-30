@@ -113,6 +113,9 @@ test_that("aggregation for llr is exact when variance is known", {
   expect_equal(triangle.fixed$tau.plusminus, triangle.agg.fixed$tau.plusminus)
 })
 
+#
+# Test bias-adjusted confidence interval function
+#
 
 max.bias = 1
 se = 2
@@ -124,5 +127,30 @@ test_that("test plusminus function", {
   expect_equal(alpha + err, 1, tolerance = 10^(-5))
 })
 
+#
+# Test 2d optrdd
+#
+
+max.window = c(1, 1)
+X.2d = cbind(X, rnorm(n))
+W = X.2d[,1] < 0 | X.2d[,2] < 0
+
+rdd.2d = optrdd.2d(X.2d, Y=Y, max.second.derivative, max.window=max.window)
+test_that("2d-optrdd gammas satisfy constraints", {
+  expect_equal(sum(rdd.2d$gamma), 0)
+  expect_equal(sum(rdd.2d$gamma * W), 1)
+  expect_equal(sum(rdd.2d$gamma * X.2d[,1]), 0)
+  expect_equal(sum(rdd.2d$gamma * X.2d[,2]), 0)
+})
+
+rdd.2d.center = optrdd.2d(X.2d, Y=Y, max.second.derivative, estimate.cate.at.point=TRUE, center.treated.sample=TRUE, max.window=max.window)
+test_that("centered 2d-optrdd gammas satisfy constraints", {
+  expect_equal(sum(rdd.2d.center$gamma), 0)
+  expect_equal(sum(rdd.2d.center$gamma * W), 1)
+  expect_equal(sum(rdd.2d.center$gamma * X.2d[,1]), 0)
+  expect_equal(sum(rdd.2d.center$gamma * X.2d[,2]), 0)
+  expect_equal(sum(rdd.2d.center$gamma * X.2d[,1] * W), 0)
+  expect_equal(sum(rdd.2d.center$gamma * X.2d[,2] * W), 0)
+})
 
 
