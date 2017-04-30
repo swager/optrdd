@@ -13,12 +13,38 @@ X = supp[bucket]
 Y = 10 + 20 * X + rnorm(n)
 
 #
-# Test methods initially
+# Test methods initially, and confirm gamma moments
 #
 
 rdd = optrdd(X, Y=Y, max.second.derivative, max.window=1)
+
+test_that("optrdd gammas satisfy constraints", {
+  half.bucket = min(rdd$gamma.fun[-1,1] - rdd$gamma.fun[-nrow(rdd$gamma.fun),1])/2
+  expect_equal(sum(rdd$gamma), 0)
+  expect_equal(sum(rdd$gamma * (X > 0)), 1)
+  expect_equal(sum(rdd$gamma * X), 0, tolerance = half.bucket)
+  expect_equal(sum(rdd$gamma * X * (X > 0)), 0, tolerance = half.bucket)
+})
+
 rectangle = llr(X, Y=Y, max.second.derivative, kernel="rectangular", minimization.target= "mse", max.window=1)
+
+test_that("rectangular kernel gammas satisfy constraints", {
+  expect_equal(sum(rectangle$gamma), 0)
+  expect_equal(sum(rectangle$gamma * (X > 0)), 1)
+  expect_equal(sum(rectangle$gamma * X), 0)
+  expect_equal(sum(rectangle$gamma * X * (X > 0)), 0)
+})
+
+
 triangle = llr(X, Y=Y, max.second.derivative, kernel="triangular", minimization.target= "mse", max.window=1)
+
+test_that("triangular kernel gammas satisfy constraints", {
+  expect_equal(sum(triangle$gamma), 0)
+  expect_equal(sum(triangle$gamma * (X > 0)), 1)
+  expect_equal(sum(triangle$gamma * X), 0)
+  expect_equal(sum(triangle$gamma * X * (X > 0)), 0)
+})
+
 
 test_that("relative performance of methods is as expected", {
   expect_true(rdd$tau.plusminus < triangle$tau.plusminus)
