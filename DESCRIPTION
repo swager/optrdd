@@ -8,7 +8,8 @@ Description: What the package does (one paragraph).
 Depends:
     R (>= 3.0.1)
 Imports: quadprog
-Suggests: RColorBrewer
+Suggests: RColorBrewer,
+    testthat
 License: What license is it under?
 Encoding: UTF-8
 LazyData: true

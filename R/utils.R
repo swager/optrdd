@@ -1,6 +1,6 @@
 get.plusminus = function(max.bias, sampling.se, alpha = 0.95) {
   rel.bias = max.bias / sampling.se
-  zz = uniroot(function(z) pnorm(rel.bias - z) + pnorm(-rel.bias - z) - 0.05, c(0, rel.bias - qnorm((1 - alpha) / 2)))$root
+  zz = uniroot(function(z) pnorm(rel.bias - z) + pnorm(-rel.bias - z) - 0.05, c(0, rel.bias - qnorm((1 - alpha) / 3)))$root
   zz * sampling.se
 }
 

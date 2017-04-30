@@ -1,17 +1,7 @@
-llr = function(X, max.second.derivative, bandwidth = NULL, Y = NULL, weights = rep(1, length(X)), threshold = 0, sigma.sq = NULL, change.derivative = TRUE, alpha = 0.95, max.window = max(abs(X - threshold)), num.bucket = 200, kernel = c("rectangular", "triangular")) {
+llr = function(X, max.second.derivative, bandwidth = NULL, Y = NULL, num.samples = rep(1, length(X)), threshold = 0, sigma.sq = NULL, change.derivative = TRUE, alpha = 0.95, max.window = max(abs(X - threshold)), num.bucket = 200, kernel = c("rectangular", "triangular"), minimization.target = c("mse", "ci.length"), use.homoskedatic.variance = FALSE) {
   
   kernel = match.arg(kernel)
-  
-  # Naive initialization for sigma.sq if needed
-  if (is.null(sigma.sq)) {
-    if (is.null(Y)) {
-      warning("Setting noise level to 1 as default...")
-      sigma.sq = 1
-    } else {
-      Y.bar = sum(Y * weights) / sum(weights)
-      sigma.sq = sum((Y - Y.bar)^2 * weights^2) / sum(weights)
-    }
-  }
+  minimization.target = match.arg(minimization.target)
   
   # We compute our estimator based on a histogram summary of the data,
   # shifted such that the threshold is at 0. The breaks vector defines
@@ -24,7 +14,20 @@ llr = function(X, max.second.derivative, bandwidth = NULL, Y = NULL, weights = r
   inrange = which(abs(X - threshold) / max.window <= 1)
   bucket = cut(X[inrange] - threshold, breaks = breaks)
   bucket.map = Matrix::sparse.model.matrix(~bucket + 0, transpose = TRUE)
-  X.counts = as.numeric(bucket.map %*% weights[inrange])
+  X.counts = as.numeric(bucket.map %*% num.samples[inrange])
+  
+  # Naive initialization for sigma.sq if needed
+  if (is.null(sigma.sq)) {
+    if (is.null(Y)) {
+      warning("Setting noise level to 1 as default...")
+      sigma.sq = 1
+    } else {
+      regr.df = data.frame(X=X, W=X>=threshold, Y=Y)
+      Y.fit = lm(Y ~ X * W, data = regr.df[inrange,], weights=num.samples[inrange])
+      sigma.sq = sum((Y[inrange] - predict(Y.fit))^2 * num.samples[inrange]^2) /
+        (sum(num.samples[inrange]) - 4)
+    }
+  }
   
   # The matrix M is used to intergrate a function over xx,
   # starting at 0. The matrix M2 integrates twice.
@@ -47,7 +50,9 @@ llr = function(X, max.second.derivative, bandwidth = NULL, Y = NULL, weights = r
     realized.idx = which((X.counts > 0) & (abs(xx) < bw))
     num.realized = length(realized.idx)
     
-    if (num.realized < 4) return(list(max.mse=NA, max.bias=NA, homosk.plusminus=NA, gamma.xx=NA, realized.idx=NA))
+    if ((sum(xx[realized.idx] > 0) < 2) | (sum(xx[realized.idx] < 0) < 2)) {
+      return(list(max.mse=NA, max.bias=NA, homosk.plusminus=NA, gamma.xx=NA, realized.idx=NA))
+    }
     
     # This optimizer learns bucket-wise gammas. Let k denote
     # the bucket index, n[k] the number of observations in
@@ -99,14 +104,20 @@ llr = function(X, max.second.derivative, bandwidth = NULL, Y = NULL, weights = r
   })
   
   # pick out the best soln
-  plusmin = unlist(sapply(soln.vec, function(vv) vv$homosk.plusminus))
-  opt.idx = which.min(plusmin)
+  if(minimization.target == "mse") {
+    max.mse = unlist(sapply(soln.vec, function(vv) vv$max.mse))
+    opt.idx = which.min(max.mse)
+  } else {
+    plusmin = unlist(sapply(soln.vec, function(vv) vv$homosk.plusminus))
+    opt.idx = which.min(plusmin)
+  }
+  
   gamma.xx = soln.vec[[opt.idx]]$gamma.xx
   realized.idx = soln.vec[[opt.idx]]$realized.idx
   
   # Now map this x-wise function into a weight for each observation
   gamma = rep(0, length(X))
-  gamma[inrange] = weights[inrange] * as.numeric(Matrix::t(bucket.map) %*% gamma.xx)
+  gamma[inrange] = num.samples[inrange] * as.numeric(Matrix::t(bucket.map) %*% gamma.xx)
   
   # Compute the worst-case imbalance...
   max.bias = max.second.derivative * sum(abs(t(M2) %*% (X.counts * gamma.xx)))
@@ -117,12 +128,17 @@ llr = function(X, max.second.derivative, bandwidth = NULL, Y = NULL, weights = r
     # The point estimate
     tau.hat = sum(gamma * Y)
     
-    # A heteroskedaticity-robust variance estimate
-    regr.df = data.frame(X=X, W=X>=threshold, Y=Y)
-    Y.fit = lm(Y ~ X * W, data = regr.df[inrange,], weights=weights[inrange])
-    Y.resid.sq = rep(0, length(Y))
-    Y.resid.sq[inrange] = (Y[inrange] - predict(Y.fit))^2 * sum(weights[inrange]) / (sum(weights[inrange]) - 4)
-    se.hat.tau = sqrt(sum(Y.resid.sq * gamma^2))
+    if (use.homoskedatic.variance) {
+      se.hat.tau = sqrt(sum(gamma^2 * sigma.sq / num.samples))
+    } else {
+      # A heteroskedaticity-robust variance estimate
+      regr.df = data.frame(X=X, W=X>=threshold, Y=Y)
+      Y.fit = lm(Y ~ X * W, data = regr.df[inrange,], weights=num.samples[inrange])
+      Y.resid.sq = rep(0, length(Y))
+      Y.resid.sq[inrange] = (Y[inrange] - predict(Y.fit))^2 *
+        sum(num.samples[inrange]) / (sum(num.samples[inrange]) - 4)
+      se.hat.tau = sqrt(sum(Y.resid.sq * gamma^2))
+    }
     
     # Confidence intervals that account for both bias and variance
     tau.plusminus = get.plusminus(max.bias, se.hat.tau, alpha)
