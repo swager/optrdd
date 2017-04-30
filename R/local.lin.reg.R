@@ -1,3 +1,28 @@
+#' Locally linear regression discontinuity design
+#' 
+#' Locally linear estimation and inference of treamtment effects identified
+#' via regression discontinuities
+#' 
+#' @param X The running variables.
+#' @param max.second.derivative A bound on the second derivative of mu_w(x) = E[Y(w) | X = x].
+#' @param bandwidth Bandwidth for the llr. If null, adaptively optimize for the bandwidth.
+#' @param Y The outcomes.
+#' @param num.samples Number of samples used to compute each datapoint (perhaps we only have
+#'                    access to summary data, where each datapoint is averaged over many samples).
+#' @param threshold The threshold determining treatment assignment.
+#' @param sigma.sq The irreducible noise level. If null, estimated from the data.
+#' @param change.derivative Whether we allow for a change in slope at the threshold.
+#' @param alpha Coverage probability of confidence intervals.
+#' @param max.window Maximum possible bandwidth to consider in optimization.
+#' @param num.bucket Number of histogram buckets in numerical analysis.
+#' @param kernel Shape of weighting function for local regression.
+#' @param minimization.target Whether bandwidth should minimize maximum mse or confidence
+#'                            interval length.
+#' @param use.homoskedatic.variance Whether confidence intervals should be built assuming homoskedasticity.
+#'
+#' @return A trained optrdd object. Note that locally linear regression also provides
+#'         a linear estimator for tau, just like optrdd. The gammas simply aren't optimal.
+#' @export
 llr = function(X,
                max.second.derivative,
                bandwidth = NULL,

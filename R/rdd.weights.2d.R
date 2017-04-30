@@ -1,3 +1,28 @@
+#' Optimized regression discontinuity design with bivariate running variable
+#'
+#' Optimized estimation and inference of treamtment effects identified
+#' via bivariate regression discontinuities
+#'
+#' @param X The running variables (must be an n x 2 matrix).
+#' @param max.second.derivative A bound on the operator norm of the second derivative of
+#'                              mu_w(x) = E[Y(w) | X = x].
+#' @param Y The outcomes.
+#' @param threshold A vector (t1, t2) such that samples are treated if Xi[1] < t1 and Xi[2] < t2.
+#' @param sigma.sq The irreducible noise level. If null, estimated from the data.
+#' @param estimate.cate.at.point Whether we want to estimate the CATE at the threshold, or can
+#'                               allow for some weighted average of the CATE.
+#' @param center.treated.sample Whether the gamma-weighted average of the treated sample should
+#'                              match the threshold. Note: if estimate.cate.at.point is TRUE, the
+#'                              center.treated.sample should also be TRUE.
+#' @param alpha Coverage probability of confidence intervals.
+#' @param lambda.mult Optional multplier that can be used to over- or under-penalize variance.
+#' @param max.window Observations further than max.window from the threshold are ignored.
+#'                   This parameter is a length-2 vector; both coordinates mus wall within the window
+#'                   to be used.
+#' @param num.bucket Number of buckets used in numerical optimization.
+#'
+#' @return Trained optrdd.2d object.
+#' @export
 optrdd.2d = function(X,
                      max.second.derivative,
                      Y = NULL,

@@ -1,3 +1,24 @@
+#' Optimized regression discontinuity design
+#'
+#' Optimized estimation and inference of treamtment effects identified
+#' via regression discontinuities
+#'
+#' @param X The running variables.
+#' @param max.second.derivative A bound on the second derivative of mu_w(x) = E[Y(w) | X = x].
+#' @param Y The outcomes.
+#' @param num.samples Number of samples used to compute each datapoint (perhaps we only have
+#'                    access to summary data, where each datapoint is averaged over many samples).
+#' @param threshold The threshold determining treatment assignment.
+#' @param sigma.sq The irreducible noise level. If null, estimated from the data.
+#' @param change.derivative Whether we allow for a change in slope at the threshold.
+#' @param alpha Coverage probability of confidence intervals.
+#' @param lambda.mult Optional multplier that can be used to over- or under-penalize variance.
+#' @param max.window Observations further than max.window from the threshold are ignored.
+#' @param num.bucket Number of buckets used in numerical optimization.
+#' @param use.homoskedatic.variance Whether confidence intervals should be built assuming homoskedasticity.
+#'
+#' @return A trained optrdd object.
+#' @export
 optrdd = function(X,
                   max.second.derivative,
                   Y = NULL,

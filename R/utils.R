@@ -1,3 +1,11 @@
+#' Bias-adjusted Gaussian confidence intervals.
+#'
+#' @param max.bias Worst-case bias of estimate.
+#' @param sampling.se Sampling error of estimate.
+#' @param alpha Coverage probability of confidence interval.
+#'
+#' @return Half-width of confidence interval.
+#' @export
 get.plusminus = function(max.bias, sampling.se, alpha = 0.95) {
     rel.bias = max.bias/sampling.se
     zz = uniroot(function(z) pnorm(rel.bias - z) +
@@ -6,11 +14,13 @@ get.plusminus = function(max.bias, sampling.se, alpha = 0.95) {
     zz * sampling.se
 }
 
+#' @export
 plot.optrdd = function(obj) {
     plot(obj$gamma.fun)
     abline(h = 0, lty = 3)
 }
 
+#' @export
 print.optrdd = function(obj) {
     if (!is.null(obj$tau.hat)) {
         print(paste0(100 * obj$alpha, "% CI for tau: ",
@@ -21,14 +31,17 @@ print.optrdd = function(obj) {
     }
 }
 
+#' @export
 summary.optrdd = function(obj) {
     unlist(obj)[1:7]
 }
 
+#' @export
 print.optrdd.2d = function(obj) {
     print.optrdd(obj)
 }
 
+#' @export
 plot.optrdd.2d = function(obj, xlab = "x1", ylab = "x2") {
     if (!requireNamespace("RColorBrewer", quietly = TRUE)) {
         stop("RColorBrewer needed for this function to work. Please install it.", 
@@ -45,6 +58,7 @@ plot.optrdd.2d = function(obj, xlab = "x1", ylab = "x2") {
         cex = 1.5, lwd = 3)
 }
 
+#' @export
 summary.optrdd.2d = function(obj) {
     summary.optrdd(obj)
 }
