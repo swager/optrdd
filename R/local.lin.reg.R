@@ -54,10 +54,6 @@ llr = function(X,
   bucket.map = Matrix::sparse.model.matrix(~bucket + 0, transpose = TRUE)
   X.counts = as.numeric(bucket.map %*% num.samples[inrange])
   
-  # Actual mean of the data in the bucket; use this to make balance sharp
-  X.mids = bucket.map %*% (X[inrange] * num.samples[inrange]) /
-    X.counts
-  
   # Naive initialization for sigma.sq if needed
   if (is.null(sigma.sq)) {
     if (is.null(Y)) {
@@ -120,14 +116,14 @@ llr = function(X,
     
     Amat = cbind(X.counts[realized.idx],
                  X.counts[realized.idx] * sign(xx[realized.idx]),
-                 X.counts[realized.idx] * X.mids[realized.idx])
+                 X.counts[realized.idx] * xx[realized.idx])
     
     if(!change.derivative) {
       bvec = c(0, 2, 0)
       meq = 3
     } else {
       Amat = cbind(Amat,
-                   X.counts[realized.idx] * pmax(X.mids[realized.idx], 0))
+                   X.counts[realized.idx] * pmax(xx[realized.idx], 0))
       bvec = c(0, 2, 0, 0)
       meq = 4
     }

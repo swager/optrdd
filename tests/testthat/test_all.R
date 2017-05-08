@@ -29,10 +29,12 @@ rectangle = llr(X, Y = Y, max.second.derivative, kernel = "rectangular",
     minimization.target = "mse", max.window = 1)
 
 test_that("rectangular kernel gammas satisfy constraints", {
+    half.bucket = min(rectangle$gamma.fun[-1, 1] -
+                      rectangle$gamma.fun[-nrow(rectangle$gamma.fun), 1])/2
     expect_equal(sum(rectangle$gamma), 0)
     expect_equal(sum(rectangle$gamma * (X > 0)), 1)
-    expect_equal(sum(rectangle$gamma * X), 0)
-    expect_equal(sum(rectangle$gamma * X * (X > 0)), 0)
+    expect_equal(sum(rectangle$gamma * X), 0, tolerance = half.bucket)
+    expect_equal(sum(rectangle$gamma * X * (X > 0)), 0, tolerance = half.bucket)
 })
 
 
@@ -40,10 +42,12 @@ triangle = llr(X, Y = Y, max.second.derivative, kernel = "triangular",
     minimization.target = "mse", max.window = 1)
 
 test_that("triangular kernel gammas satisfy constraints", {
+    half.bucket = min(triangle$gamma.fun[-1, 1] -
+                      triangle$gamma.fun[-nrow(triangle$gamma.fun), 1])/2
     expect_equal(sum(triangle$gamma), 0)
     expect_equal(sum(triangle$gamma * (X > 0)), 1)
-    expect_equal(sum(triangle$gamma * X), 0)
-    expect_equal(sum(triangle$gamma * X * (X > 0)), 0)
+    expect_equal(sum(triangle$gamma * X), 0, tolerance = half.bucket)
+    expect_equal(sum(triangle$gamma * X * (X > 0)), 0, tolerance = half.bucket)
 })
 
 
