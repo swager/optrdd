@@ -18,16 +18,16 @@
 #' @return A trained optrdd object.
 #' @export
 optrdd.new = function(X,
-                  Y = NULL,
-                  W,
-                  max.second.derivative,
-                  center = NULL,
-                  sigma.sq = NULL,
-                  alpha = 0.95,
-                  lambda.mult = 1,
-                  bin.width = NULL,
-                  use.homoskedatic.variance = FALSE) {
-  
+                      Y = NULL,
+                      W,
+                      max.second.derivative,
+                      center = NULL,
+                      sigma.sq = NULL,
+                      alpha = 0.95,
+                      lambda.mult = 1,
+                      bin.width = NULL,
+                      use.homoskedatic.variance = FALSE) {
+    
     n = length(W)
     if (class(W) == "logical") W = as.numeric(W)
     if (!is.null(Y) & (length(Y) != n)) { stop("Y and W must have same length.") }
@@ -94,8 +94,8 @@ optrdd.new = function(X,
     # Define matrix of constraints
     # D2 is a raw curvature matrix, not accounting for bin.width
     if (nvar == 1) {
-         D2 = Matrix::bandSparse(n=num.bucket-2, m=num.bucket, k = c(0, 1, 2),
-                    diag = list(rep(1, num.bucket), rep(-2, num.bucket))[c(1, 2, 1)])
+        D2 = Matrix::bandSparse(n=num.bucket-2, m=num.bucket, k = c(0, 1, 2),
+                                diag = list(rep(1, num.bucket), rep(-2, num.bucket))[c(1, 2, 1)])
     } else if (nvar == 2) {
         all.idx = expand.grid(1:length(xx1), 1:length(xx2))
         # remove corners
@@ -149,46 +149,46 @@ optrdd.new = function(X,
     dvec = c(rep(0, num.realized.0 + num.realized.1 + 1), -1, 1,
              rep(0, num.lambda - 3 + (1 + cate.at.pt) * ncol(D2)))
     Amat = Matrix::t(rbind(
-             cbind(Matrix::Diagonal(num.realized.0, -1),
-                   Matrix::Matrix(0, num.realized.0, num.realized.1),
-                   0, 0, 1, xx.centered[realized.idx.0,],
-                   if(cate.at.pt) { -xx.centered[realized.idx.0,] } else { numeric() },
-                   Matrix::Diagonal(num.bucket, 1)[realized.idx.0,],
-                   if(cate.at.pt) { Matrix::Matrix(0, num.realized.0, num.bucket) } else { numeric() }),
-             cbind(Matrix::Matrix(0, num.realized.1, num.realized.0),
-                   Matrix::Diagonal(num.realized.1, -1),
-                   0, 1, 0, xx.centered[realized.idx.1,],
-                   if(cate.at.pt) { xx.centered[realized.idx.1,] } else { numeric() },
-                   if(cate.at.pt) {
-                       cbind(matrix(0, num.realized.1, num.bucket),
-                             Matrix::Diagonal(num.bucket, 1)[realized.idx.1,])
-                   } else {
-                       Matrix::Diagonal(num.bucket, 1)[realized.idx.1,]
-                   }),
-             Matrix::sparseMatrix(dims = c(length(corner.idx), num.params),
-                                  i = 1:length(corner.idx),
-                                  j = num.realized.0 + num.realized.1 + num.lambda + corner.idx,
-                                  x = rep(1, length(corner.idx))),
-             if(cate.at.pt) {
-                 Matrix::sparseMatrix(dims = c(length(corner.idx), num.params),
-                                      i = 1:length(corner.idx),
-                                      j = num.realized.0 + num.realized.1 + num.lambda + num.bucket + corner.idx,
-                                      x = rep(1, length(corner.idx)))
-             } else {
-                 numeric()
-             },
-             c(rep(0, num.realized.0 + num.realized.1), 1, rep(0, num.lambda - 1 + (1 + cate.at.pt) * ncol(D2))),
-             cbind(matrix(0, 2 * nrow(D2), num.realized.0 + num.realized.1),
-                   bin.width^2 * max.second.derivative,
-                   matrix(0, 2 * nrow(D2), num.lambda - 1),
-                   rbind(D2, -D2),
-                   if (cate.at.pt) { matrix(0, 2 * nrow(D2), num.bucket) } else { numeric() }),
-             if (cate.at.pt) {
-                 cbind(matrix(0, 2 * nrow(D2), num.realized.0 + num.realized.1),
-                       bin.width^2 * max.second.derivative,
-                       matrix(0, 2 * nrow(D2), num.lambda - 1 + num.bucket),
-                       rbind(D2, -D2))
-             }))
+        cbind(Matrix::Diagonal(num.realized.0, -1),
+              Matrix::Matrix(0, num.realized.0, num.realized.1),
+              0, 0, 1, xx.centered[realized.idx.0,],
+              if(cate.at.pt) { -xx.centered[realized.idx.0,] } else { numeric() },
+              Matrix::Diagonal(num.bucket, 1)[realized.idx.0,],
+              if(cate.at.pt) { Matrix::Matrix(0, num.realized.0, num.bucket) } else { numeric() }),
+        cbind(Matrix::Matrix(0, num.realized.1, num.realized.0),
+              Matrix::Diagonal(num.realized.1, -1),
+              0, 1, 0, xx.centered[realized.idx.1,],
+              if(cate.at.pt) { xx.centered[realized.idx.1,] } else { numeric() },
+              if(cate.at.pt) {
+                  cbind(matrix(0, num.realized.1, num.bucket),
+                        Matrix::Diagonal(num.bucket, 1)[realized.idx.1,])
+              } else {
+                  Matrix::Diagonal(num.bucket, 1)[realized.idx.1,]
+              }),
+        Matrix::sparseMatrix(dims = c(length(corner.idx), num.params),
+                             i = 1:length(corner.idx),
+                             j = num.realized.0 + num.realized.1 + num.lambda + corner.idx,
+                             x = rep(1, length(corner.idx))),
+        if(cate.at.pt) {
+            Matrix::sparseMatrix(dims = c(length(corner.idx), num.params),
+                                 i = 1:length(corner.idx),
+                                 j = num.realized.0 + num.realized.1 + num.lambda + num.bucket + corner.idx,
+                                 x = rep(1, length(corner.idx)))
+        } else {
+            numeric()
+        },
+        c(rep(0, num.realized.0 + num.realized.1), 1, rep(0, num.lambda - 1 + (1 + cate.at.pt) * ncol(D2))),
+        cbind(matrix(0, 2 * nrow(D2), num.realized.0 + num.realized.1),
+              bin.width^2 * max.second.derivative,
+              matrix(0, 2 * nrow(D2), num.lambda - 1),
+              rbind(D2, -D2),
+              if (cate.at.pt) { matrix(0, 2 * nrow(D2), num.bucket) } else { numeric() }),
+        if (cate.at.pt) {
+            cbind(matrix(0, 2 * nrow(D2), num.realized.0 + num.realized.1),
+                  bin.width^2 * max.second.derivative,
+                  matrix(0, 2 * nrow(D2), num.lambda - 1 + num.bucket),
+                  rbind(D2, -D2))
+        }))
     
     meq = num.realized.0 + num.realized.1 + length(corner.idx) * (1 + cate.at.pt)
     bvec = rep(0, ncol(Amat))
@@ -199,50 +199,50 @@ optrdd.new = function(X,
     gamma.0[realized.idx.0] = - soln$solution[1:num.realized.0] / sigma.sq / 2
     gamma.1 = rep(0, num.bucket)
     gamma.1[realized.idx.1] = - soln$solution[num.realized.0 + 1:num.realized.1] / sigma.sq / 2
-  
-  # Now map this x-wise function into a weight for each observation
-  gamma = rep(0, length(W))
-  gamma[W==0] = as.numeric(Matrix::t(bucket.map[,W==0]) %*% gamma.0)
-  gamma[W==1] = as.numeric(Matrix::t(bucket.map[,W==1]) %*% gamma.1)
-  
-  # Compute the worst-case imbalance...
-  max.bias = soln$solution[num.realized.0 + num.realized.1 + 1] / (2 * max.second.derivative^2)
-  
-  # If outcomes are provided, also compute confidence intervals for tau.
-  if (!is.null(Y)) {
     
-    # The point estimate
-    tau.hat = sum(gamma * Y)
+    # Now map this x-wise function into a weight for each observation
+    gamma = rep(0, length(W))
+    gamma[W==0] = as.numeric(Matrix::t(bucket.map[,W==0]) %*% gamma.0)
+    gamma[W==1] = as.numeric(Matrix::t(bucket.map[,W==1]) %*% gamma.1)
     
-    if (use.homoskedatic.variance) {
-      se.hat.tau = sqrt(sum(gamma^2 * sigma.sq / num.samples))
+    # Compute the worst-case imbalance...
+    max.bias = soln$solution[num.realized.0 + num.realized.1 + 1] / (2 * max.second.derivative^2)
+    
+    # If outcomes are provided, also compute confidence intervals for tau.
+    if (!is.null(Y)) {
+        
+        # The point estimate
+        tau.hat = sum(gamma * Y)
+        
+        if (use.homoskedatic.variance) {
+            se.hat.tau = sqrt(sum(gamma^2 * sigma.sq / num.samples))
+        } else {
+            # A heteroskedaticity-robust variance estimate
+            regr.df = data.frame(X=X, W=W, Y=Y)
+            Y.fit = lm(Y ~ X * W, data = regr.df)
+            Y.resid.sq = (Y - predict(Y.fit))^2 * length(W) / (length(W) - 4)
+            se.hat.tau = sqrt(sum(Y.resid.sq * gamma^2))
+        }
+        
+        # Confidence intervals that account for both bias and variance
+        tau.plusminus = get.plusminus(max.bias, se.hat.tau, alpha)
     } else {
-      # A heteroskedaticity-robust variance estimate
-      regr.df = data.frame(X=X, W=W, Y=Y)
-      Y.fit = lm(Y ~ X * W, data = regr.df)
-      Y.resid.sq = (Y - predict(Y.fit))^2 * length(W) / (length(W) - 4)
-      se.hat.tau = sqrt(sum(Y.resid.sq * gamma^2))
+        tau.hat = NULL
+        se.hat.tau = sqrt(sigma.sq * sum(gamma^2))
+        tau.plusminus = get.plusminus(max.bias, se.hat.tau, alpha)
     }
     
-    # Confidence intervals that account for both bias and variance
-    tau.plusminus = get.plusminus(max.bias, se.hat.tau, alpha)
-  } else {
-    tau.hat = NULL
-    se.hat.tau = sqrt(sigma.sq * sum(gamma^2))
-    tau.plusminus = get.plusminus(max.bias, se.hat.tau, alpha)
-  }
-  
-  ret = list(tau.hat=tau.hat,
-             tau.plusminus=tau.plusminus,
-             alpha=alpha,
-             max.bias = max.bias,
-             sampling.se=se.hat.tau,
-             gamma=gamma,
-             gamma.fun.0 = data.frame(xx=xx.grid[realized.idx.0],
-                                     gamma=gamma.0[realized.idx.0]),
-             gamma.fun.1 = data.frame(xx=xx.grid[realized.idx.1],
-                                      gamma=gamma.1[realized.idx.1]))
-  class(ret) = "optrdd"
-  return(ret)
+    ret = list(tau.hat=tau.hat,
+               tau.plusminus=tau.plusminus,
+               alpha=alpha,
+               max.bias = max.bias,
+               sampling.se=se.hat.tau,
+               gamma=gamma,
+               gamma.fun.0 = data.frame(xx=xx.grid[realized.idx.0],
+                                        gamma=gamma.0[realized.idx.0]),
+               gamma.fun.1 = data.frame(xx=xx.grid[realized.idx.1],
+                                        gamma=gamma.1[realized.idx.1]))
+    class(ret) = "optrdd"
+    return(ret)
 }
 
