@@ -67,7 +67,7 @@ optrdd.new = function(X,
     } else if (nvar == 2) {
         
         if (is.null(bin.width)) {
-            bin.width = sqrt((max(X[,1]) - min(X[,1])) * (max(X[,2]) - min(X[,2])) / 2400)
+            bin.width = sqrt((max(X[,1]) - min(X[,1])) * (max(X[,2]) - min(X[,2])) / 240)
         }
         breaks1 = seq(min(X[,1]) - bin.width/2, max(X[,1]) + bin.width, by = bin.width)
         breaks2 = seq(min(X[,2]) - bin.width/2, max(X[,2]) + bin.width, by = bin.width)
@@ -92,35 +92,31 @@ optrdd.new = function(X,
          min.idx = max(which(xx.grid < center))
          center.idx = c(min.idx, min.idx + 1)
     } else if (nvar == 2) {
-        D2.rows = unlist(apply(expand.grid(1:length(xx1), 1:length(xx2)), 1, function(i12) {
-            i1 = i12[1]
-            i2 = i12[2]
+        all.idx = expand.grid(1:length(xx1), 1:length(xx2))
+        # remove corners
+        all.idx = all.idx[!(all.idx[,1] %in% c(1, length(xx1)) & all.idx[,2] %in% c(1, length(xx2))),]
+        D2.entries = do.call(rbind, sapply(1:nrow(all.idx), function(i12) {
+            i1 = all.idx[i12,1]
+            i2 = all.idx[i12,2]
             edge.1 = i1 %in% c(1, length(xx1))
             edge.2 = i2 %in% c(1, length(xx2))
-            if (edge.1 & edge.2) return(numeric())
-            
-            list(
+            rbind(
                 if (!edge.1) {
-                    Matrix::sparseMatrix(i=rep(1, 3),
-                                         j=(i1 - 1):(i1 + 1) + (i2 - 1) * length(xx1),
-                                         x=c(1, -2, 1) / bin.width^2,
-                                         dims=c(1, num.bucket))
+                    cbind(j=(i1 - 1):(i1 + 1) + (i2 - 1) * length(xx1),
+                          x=c(1, -2, 1) / bin.width^2)
                 } else { numeric() },
                 if (!edge.2) {
-                    Matrix::sparseMatrix(i=rep(1, 3),
-                                         j=i1 + ((i2 - 2):i2) * length(xx1),
-                                         x=c(1, -2, 1) / bin.width^2,
-                                         dims=c(1, num.bucket))
+                    cbind(j=i1 + ((i2 - 2):i2) * length(xx1),
+                          x=c(1, -2, 1) / bin.width^2)
                 } else { numeric() },
                 if (!(edge.1 | edge.2)) {
-                    Matrix::sparseMatrix(i = c(rep(1, 3), rep(2, 3)),
-                                         j = c((i1 - 1):(i1 + 1) + ((i2 - 2):i2) * length(xx1),
-                                               (i1 - 1):(i1 + 1) + (i2:(i2 - 2)) * length(xx1)),
-                                         x = c(c(1/2, -1, 1/2) / bin.width^2, c(1/2, -1, 1/2) / bin.width^2),
-                                         dims=c(2, num.bucket))
+                    cbind(j = c((i1 - 1):(i1 + 1) + ((i2 - 2):i2) * length(xx1),
+                                (i1 - 1):(i1 + 1) + (i2:(i2 - 2)) * length(xx1)),
+                          x = c(c(1/2, -1, 1/2) / bin.width^2, c(1/2, -1, 1/2) / bin.width^2))
                 } else { numeric() })
         }))
-        D2 = Reduce(Matrix::rBind, D2.rows)
+        D2.i = c(t(matrix(rep(1:(nrow(D2.entries)/3), 3), ncol = 3)))
+        D2 = Matrix::sparseMatrix(i=D2.i, j=D2.entries[,1], x=D2.entries[,2])
     } else {
         stop("Not yet implemented for 3 or more running variables.")
     }
