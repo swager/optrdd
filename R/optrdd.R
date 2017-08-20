@@ -61,24 +61,31 @@ optrdd.new = function(X,
         }
         breaks = seq(min(X[,1]) - bin.width/2, max(X[,1]) + bin.width, by = bin.width)
         xx.grid = breaks[-1] - bin.width/2
-        idx.to.bucket = as.numeric(cut(X[,1], breaks = breaks))
         num.bucket = length(xx.grid)
+        
+        xx.centered = matrix(xx.grid - center, ncol = 1)
+        corner.idx = c(1, length(xx.grid))
+        
+        idx.to.bucket = as.numeric(cut(X[,1], breaks = breaks))
         
     } else if (nvar == 2) {
         
         if (is.null(bin.width)) {
-            bin.width = sqrt((max(X[,1]) - min(X[,1])) * (max(X[,2]) - min(X[,2])) / 240)
+            bin.width = sqrt((max(X[,1]) - min(X[,1])) * (max(X[,2]) - min(X[,2])) / 400)
         }
         breaks1 = seq(min(X[,1]) - bin.width/2, max(X[,1]) + bin.width, by = bin.width)
         breaks2 = seq(min(X[,2]) - bin.width/2, max(X[,2]) + bin.width, by = bin.width)
         xx1 = breaks1[-1] - bin.width/2
         xx2 = breaks2[-1] - bin.width/2
         xx.grid = expand.grid(xx1, xx2)
+        num.bucket = nrow(xx.grid)
+        
+        xx.centered = t(t(xx.grid) - center)
+        corner.idx = c(1, length(xx1), length(xx1) * (length(xx2) - 1) + c(1, length(xx1)))
         
         idx.1 = as.numeric(cut(X[,1], breaks = breaks1))
         idx.2 = as.numeric(cut(X[,2], breaks = breaks2))
         idx.to.bucket = sapply(1:nrow(X), function(iter) idx.1[iter] + (idx.2[iter] - 1) * length(xx1))
-        num.bucket = nrow(xx.grid)
         
     } else {
         stop("Not yet implemented for 3 or more running variables.")
@@ -89,8 +96,6 @@ optrdd.new = function(X,
     if (nvar == 1) {
          D2 = Matrix::bandSparse(n=num.bucket-2, m=num.bucket, k = c(0, 1, 2),
                     diag = list(rep(1, num.bucket), rep(-2, num.bucket))[c(1, 2, 1)])
-         min.idx = max(which(xx.grid < center))
-         center.idx = c(min.idx, min.idx + 1)
     } else if (nvar == 2) {
         all.idx = expand.grid(1:length(xx1), 1:length(xx2))
         # remove corners
@@ -121,7 +126,6 @@ optrdd.new = function(X,
         stop("Not yet implemented for 3 or more running variables.")
     }
     
-    
     # Construct a (weighted) histogram representing the X and Y values.
     fact = factor(idx.to.bucket, levels = as.character(1:num.bucket))
     bucket.map = Matrix::sparse.model.matrix(~fact + 0, transpose = TRUE)
@@ -134,8 +138,8 @@ optrdd.new = function(X,
     num.realized.1 = length(realized.idx.1)
     
     # solution to opt problem is (G(0), G(1), lambda, f0, f1)
-    num.lambda = 4 + cate.at.pt
-    num.params = num.realized.0 + num.realized.1 + num.lambda + (1 + cate.at.pt) * ncol(D2)
+    num.lambda = 3 + nvar *(1 + cate.at.pt)
+    num.params = num.realized.0 + num.realized.1 + num.lambda + (1 + cate.at.pt) * num.bucket
     Dmat = Matrix::Diagonal(num.params,
                             c((X.counts[realized.idx.0] - W.counts[realized.idx.0]) / 2 / sigma.sq,
                               (W.counts[realized.idx.1]) / 2 / sigma.sq,
@@ -147,20 +151,32 @@ optrdd.new = function(X,
     Amat = Matrix::t(rbind(
              cbind(Matrix::Diagonal(num.realized.0, -1),
                    Matrix::Matrix(0, num.realized.0, num.realized.1),
-                   0, 0, 1, xx.grid[realized.idx.0] - center,
-                   if(cate.at.pt) { -xx.grid[realized.idx.0] + center } else { numeric() },
+                   0, 0, 1, xx.centered[realized.idx.0,],
+                   if(cate.at.pt) { -xx.centered[realized.idx.0,] } else { numeric() },
                    Matrix::Diagonal(num.bucket, 1)[realized.idx.0,],
                    if(cate.at.pt) { Matrix::Matrix(0, num.realized.0, num.bucket) } else { numeric() }),
              cbind(Matrix::Matrix(0, num.realized.1, num.realized.0),
                    Matrix::Diagonal(num.realized.1, -1),
-                   0, 1, 0, xx.grid[realized.idx.1] - center,
-                   if(cate.at.pt) { xx.grid[realized.idx.1] - center } else { numeric() },
+                   0, 1, 0, xx.centered[realized.idx.1,],
+                   if(cate.at.pt) { xx.centered[realized.idx.1,] } else { numeric() },
                    if(cate.at.pt) {
                        cbind(matrix(0, num.realized.1, num.bucket),
                              Matrix::Diagonal(num.bucket, 1)[realized.idx.1,])
                    } else {
                        Matrix::Diagonal(num.bucket, 1)[realized.idx.1,]
                    }),
+             Matrix::sparseMatrix(dims = c(length(corner.idx), num.params),
+                                  i = 1:length(corner.idx),
+                                  j = num.realized.0 + num.realized.1 + num.lambda + corner.idx,
+                                  x = rep(1, length(corner.idx))),
+             if(cate.at.pt) {
+                 Matrix::sparseMatrix(dims = c(length(corner.idx), num.params),
+                                      i = 1:length(corner.idx),
+                                      j = num.realized.0 + num.realized.1 + num.lambda + num.bucket + corner.idx,
+                                      x = rep(1, length(corner.idx)))
+             } else {
+                 numeric()
+             },
              c(rep(0, num.realized.0 + num.realized.1), 1, rep(0, num.lambda - 1 + (1 + cate.at.pt) * ncol(D2))),
              cbind(matrix(0, 2 * nrow(D2), num.realized.0 + num.realized.1),
                    bin.width^2 * max.second.derivative,
@@ -174,7 +190,7 @@ optrdd.new = function(X,
                        rbind(D2, -D2))
              }))
     
-    meq = num.realized.0 + num.realized.1
+    meq = num.realized.0 + num.realized.1 + length(corner.idx) * (1 + cate.at.pt)
     bvec = rep(0, ncol(Amat))
     
     soln = quadprog::solve.QP(Dmat, dvec, Amat, bvec, meq=meq, factorized=FALSE)
@@ -185,7 +201,7 @@ optrdd.new = function(X,
     gamma.1[realized.idx.1] = - soln$solution[num.realized.0 + 1:num.realized.1] / sigma.sq / 2
   
   # Now map this x-wise function into a weight for each observation
-  gamma = rep(0, length(X))
+  gamma = rep(0, length(W))
   gamma[W==0] = as.numeric(Matrix::t(bucket.map[,W==0]) %*% gamma.0)
   gamma[W==1] = as.numeric(Matrix::t(bucket.map[,W==1]) %*% gamma.1)
   
