@@ -62,11 +62,12 @@ optrdd.new = function(X,
         breaks = seq(min(X[,1]) - bin.width/2, max(X[,1]) + bin.width, by = bin.width)
         xx.grid = breaks[-1] - bin.width/2
         idx.to.bucket = as.numeric(cut(X[,1], breaks = breaks))
+        num.bucket = length(xx.grid)
         
     } else if (nvar == 2) {
         
         if (is.null(bin.width)) {
-            bin.width = sqrt((max(X[,1]) - min(X[,1])) * (max(X[,2]) - min(X[,2])) / 1600)
+            bin.width = sqrt((max(X[,1]) - min(X[,1])) * (max(X[,2]) - min(X[,2])) / 2400)
         }
         breaks1 = seq(min(X[,1]) - bin.width/2, max(X[,1]) + bin.width, by = bin.width)
         breaks2 = seq(min(X[,2]) - bin.width/2, max(X[,2]) + bin.width, by = bin.width)
@@ -77,6 +78,7 @@ optrdd.new = function(X,
         idx.1 = as.numeric(cut(X[,1], breaks = breaks1))
         idx.2 = as.numeric(cut(X[,2], breaks = breaks2))
         idx.to.bucket = sapply(1:nrow(X), function(iter) idx.1[iter] + (idx.2[iter] - 1) * length(xx1))
+        num.bucket = nrow(xx.grid)
         
     } else {
         stop("Not yet implemented for 3 or more running variables.")
@@ -85,17 +87,47 @@ optrdd.new = function(X,
     # Define matrix of constraints
     # D2 is a raw curvature matrix, not accounting for bin.width
     if (nvar == 1) {
-         D2 = Matrix::bandSparse(n=length(xx.grid)-2, m=length(xx.grid), k = c(0, 1, 2),
-                    diag = list(rep(1, length(xx.grid)), rep(-2, length(xx.grid)))[c(1, 2, 1)])
+         D2 = Matrix::bandSparse(n=num.bucket-2, m=num.bucket, k = c(0, 1, 2),
+                    diag = list(rep(1, num.bucket), rep(-2, num.bucket))[c(1, 2, 1)])
          min.idx = max(which(xx.grid < center))
          center.idx = c(min.idx, min.idx + 1)
+    } else if (nvar == 2) {
+        D2.rows = unlist(apply(expand.grid(1:length(xx1), 1:length(xx2)), 1, function(i12) {
+            i1 = i12[1]
+            i2 = i12[2]
+            edge.1 = i1 %in% c(1, length(xx1))
+            edge.2 = i2 %in% c(1, length(xx2))
+            if (edge.1 & edge.2) return(numeric())
+            
+            list(
+                if (!edge.1) {
+                    Matrix::sparseMatrix(i=rep(1, 3),
+                                         j=(i1 - 1):(i1 + 1) + (i2 - 1) * length(xx1),
+                                         x=c(1, -2, 1) / bin.width^2,
+                                         dims=c(1, num.bucket))
+                } else { numeric() },
+                if (!edge.2) {
+                    Matrix::sparseMatrix(i=rep(1, 3),
+                                         j=i1 + ((i2 - 2):i2) * length(xx1),
+                                         x=c(1, -2, 1) / bin.width^2,
+                                         dims=c(1, num.bucket))
+                } else { numeric() },
+                if (!(edge.1 | edge.2)) {
+                    Matrix::sparseMatrix(i = c(rep(1, 3), rep(2, 3)),
+                                         j = c((i1 - 1):(i1 + 1) + ((i2 - 2):i2) * length(xx1),
+                                               (i1 - 1):(i1 + 1) + (i2:(i2 - 2)) * length(xx1)),
+                                         x = c(c(1/2, -1, 1/2) / bin.width^2, c(1/2, -1, 1/2) / bin.width^2),
+                                         dims=c(2, num.bucket))
+                } else { numeric() })
+        }))
+        D2 = Reduce(Matrix::rBind, D2.rows)
     } else {
         stop("Not yet implemented for 3 or more running variables.")
     }
     
     
     # Construct a (weighted) histogram representing the X and Y values.
-    fact = factor(idx.to.bucket, levels = as.character(1:length(xx.grid)))
+    fact = factor(idx.to.bucket, levels = as.character(1:num.bucket))
     bucket.map = Matrix::sparse.model.matrix(~fact + 0, transpose = TRUE)
     X.counts = as.numeric(bucket.map %*% rep(1, n))
     W.counts = as.numeric(bucket.map %*% W)
@@ -121,28 +153,28 @@ optrdd.new = function(X,
                    Matrix::Matrix(0, num.realized.0, num.realized.1),
                    0, 0, 1, xx.grid[realized.idx.0] - center,
                    if(cate.at.pt) { -xx.grid[realized.idx.0] + center } else { numeric() },
-                   Matrix::Diagonal(length(xx.grid), 1)[realized.idx.0,],
-                   if(cate.at.pt) { Matrix::Matrix(0, num.realized.0, length(xx.grid)) } else { numeric() }),
+                   Matrix::Diagonal(num.bucket, 1)[realized.idx.0,],
+                   if(cate.at.pt) { Matrix::Matrix(0, num.realized.0, num.bucket) } else { numeric() }),
              cbind(Matrix::Matrix(0, num.realized.1, num.realized.0),
                    Matrix::Diagonal(num.realized.1, -1),
                    0, 1, 0, xx.grid[realized.idx.1] - center,
                    if(cate.at.pt) { xx.grid[realized.idx.1] - center } else { numeric() },
                    if(cate.at.pt) {
-                       cbind(matrix(0, num.realized.1, length(xx.grid)),
-                             Matrix::Diagonal(length(xx.grid), 1)[realized.idx.1,])
+                       cbind(matrix(0, num.realized.1, num.bucket),
+                             Matrix::Diagonal(num.bucket, 1)[realized.idx.1,])
                    } else {
-                       Matrix::Diagonal(length(xx.grid), 1)[realized.idx.1,]
+                       Matrix::Diagonal(num.bucket, 1)[realized.idx.1,]
                    }),
              c(rep(0, num.realized.0 + num.realized.1), 1, rep(0, num.lambda - 1 + (1 + cate.at.pt) * ncol(D2))),
              cbind(matrix(0, 2 * nrow(D2), num.realized.0 + num.realized.1),
                    bin.width^2 * max.second.derivative,
                    matrix(0, 2 * nrow(D2), num.lambda - 1),
                    rbind(D2, -D2),
-                   if (cate.at.pt) { matrix(0, 2 * nrow(D2), length(xx.grid)) } else { numeric() }),
+                   if (cate.at.pt) { matrix(0, 2 * nrow(D2), num.bucket) } else { numeric() }),
              if (cate.at.pt) {
                  cbind(matrix(0, 2 * nrow(D2), num.realized.0 + num.realized.1),
                        bin.width^2 * max.second.derivative,
-                       matrix(0, 2 * nrow(D2), num.lambda - 1 + length(xx.grid)),
+                       matrix(0, 2 * nrow(D2), num.lambda - 1 + num.bucket),
                        rbind(D2, -D2))
              }))
     
@@ -151,9 +183,9 @@ optrdd.new = function(X,
     
     soln = quadprog::solve.QP(Dmat, dvec, Amat, bvec, meq=meq, factorized=FALSE)
     
-    gamma.0 = rep(0, length(xx.grid))
+    gamma.0 = rep(0, num.bucket)
     gamma.0[realized.idx.0] = - soln$solution[1:num.realized.0] / sigma.sq / 2
-    gamma.1 = rep(0, length(xx.grid))
+    gamma.1 = rep(0, num.bucket)
     gamma.1[realized.idx.1] = - soln$solution[num.realized.0 + 1:num.realized.1] / sigma.sq / 2
   
   # Now map this x-wise function into a weight for each observation
