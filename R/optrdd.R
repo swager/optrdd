@@ -57,14 +57,14 @@ optrdd.new = function(X,
     if (nvar == 1) {
         
         if (is.null(bin.width)) {
-            bin.width = (max(X[,1]) - min(X[,1])) / 200
+            bin.width = (max(X[,1]) - min(X[,1])) / 60
         }
         breaks = seq(min(X[,1]) - bin.width/2, max(X[,1]) + bin.width, by = bin.width)
         xx.grid = breaks[-1] - bin.width/2
         num.bucket = length(xx.grid)
         
         xx.centered = matrix(xx.grid - center, ncol = 1)
-        corner.idx = c(1, length(xx.grid))
+        zeroed.idx = max(which(xx.centered < 0)) + c(0, 1)
         
         idx.to.bucket = as.numeric(cut(X[,1], breaks = breaks))
         
@@ -81,7 +81,9 @@ optrdd.new = function(X,
         num.bucket = nrow(xx.grid)
         
         xx.centered = t(t(xx.grid) - center)
-        corner.idx = c(1, length(xx1), length(xx1) * (length(xx2) - 1) + c(1, length(xx1)))
+        z1 = max(which(xx1 < 0)) + c(0, 1)
+        z2 = max(which(xx2 < 0)) + c(0, 1)
+        zeroed.idx = as.matrix(expand.grid(z1 - 1, z2 - 1)) %*% c(1, length(xx1))
         
         idx.1 = as.numeric(cut(X[,1], breaks = breaks1))
         idx.2 = as.numeric(cut(X[,2], breaks = breaks2))
@@ -145,7 +147,7 @@ optrdd.new = function(X,
                               (W.counts[realized.idx.1]) / 2 / sigma.sq,
                               1 / max.second.derivative^2 / 2,
                               rep(0, num.lambda - 1 + (1 + cate.at.pt) * ncol(D2)))
-                            + 0.0000000001)
+                            + 0.000000000001)
     dvec = c(rep(0, num.realized.0 + num.realized.1 + 1), -1, 1,
              rep(0, num.lambda - 3 + (1 + cate.at.pt) * ncol(D2)))
     Amat = Matrix::t(rbind(
@@ -160,29 +162,27 @@ optrdd.new = function(X,
               0, 1, 0, xx.centered[realized.idx.1,],
               if(cate.at.pt) { xx.centered[realized.idx.1,] } else { numeric() },
               if(cate.at.pt) {
-                  cbind(matrix(0, num.realized.1, num.bucket),
+                  cbind(Matrix::Matrix(0, num.realized.1, num.bucket),
                         Matrix::Diagonal(num.bucket, 1)[realized.idx.1,])
               } else {
                   Matrix::Diagonal(num.bucket, 1)[realized.idx.1,]
               }),
-        Matrix::sparseMatrix(dims = c(length(corner.idx), num.params),
-                             i = 1:length(corner.idx),
-                             j = num.realized.0 + num.realized.1 + num.lambda + corner.idx,
-                             x = rep(1, length(corner.idx))),
+        Matrix::sparseMatrix(dims = c(length(zeroed.idx), num.params),
+                             i = 1:length(zeroed.idx),
+                             j = num.realized.0 + num.realized.1 + num.lambda + zeroed.idx,
+                             x = rep(1, length(zeroed.idx))),
         if(cate.at.pt) {
-            Matrix::sparseMatrix(dims = c(length(corner.idx), num.params),
-                                 i = 1:length(corner.idx),
-                                 j = num.realized.0 + num.realized.1 + num.lambda + num.bucket + corner.idx,
-                                 x = rep(1, length(corner.idx)))
-        } else {
-            numeric()
-        },
+            Matrix::sparseMatrix(dims = c(length(zeroed.idx), num.params),
+                                 i = 1:length(zeroed.idx),
+                                 j = num.realized.0 + num.realized.1 + num.lambda + num.bucket + zeroed.idx,
+                                 x = rep(1, length(zeroed.idx)))
+        } else { numeric() },
         c(rep(0, num.realized.0 + num.realized.1), 1, rep(0, num.lambda - 1 + (1 + cate.at.pt) * ncol(D2))),
         cbind(Matrix::Matrix(0, 2 * nrow(D2), num.realized.0 + num.realized.1),
               bin.width^2,
               matrix(0, 2 * nrow(D2), num.lambda - 1),
               rbind(D2, -D2),
-              if (cate.at.pt) { matrix(0, 2 * nrow(D2), num.bucket) } else { numeric() }),
+              if (cate.at.pt) { Matrix::Matrix(0, 2 * nrow(D2), num.bucket) } else { numeric() }),
         if (cate.at.pt) {
             cbind(Matrix::Matrix(0, 2 * nrow(D2), num.realized.0 + num.realized.1),
                   bin.width^2,
@@ -190,7 +190,7 @@ optrdd.new = function(X,
                   rbind(D2, -D2))
         }))
     
-    meq = num.realized.0 + num.realized.1 + length(corner.idx) * (1 + cate.at.pt)
+    meq = num.realized.0 + num.realized.1 + length(zeroed.idx) * (1 + cate.at.pt)
     bvec = rep(0, ncol(Amat))
     
     soln = quadprog::solve.QP(Dmat, dvec, Amat, bvec, meq=meq, factorized=FALSE)
@@ -210,6 +210,7 @@ optrdd.new = function(X,
     max.bias = max.second.derivative * t.hat
     
     ff = soln$solution[num.realized.0 + num.realized.1 + num.lambda + 1:num.bucket]
+    plot(ff + soln$solution[num.realized.0 + num.realized.1 + 3] + (soln$solution[num.realized.0 + num.realized.1 + 4] - soln$solution[num.realized.0 + num.realized.1 + 5]) * xx.centered)
     
     # If outcomes are provided, also compute confidence intervals for tau.
     if (!is.null(Y)) {
