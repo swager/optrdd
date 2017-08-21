@@ -95,7 +95,7 @@ optrdd.new = function(X,
     } else if (nvar == 2) {
         
         if (is.null(bin.width)) {
-            bin.width = sqrt((max(X[,1]) - min(X[,1])) * (max(X[,2]) - min(X[,2])) / 4000)
+            bin.width = sqrt((max(X[,1]) - min(X[,1])) * (max(X[,2]) - min(X[,2])) / 10000)
         }
         breaks1 = seq(min(X[,1]) - bin.width/2, max(X[,1]) + bin.width, by = bin.width)
         breaks2 = seq(min(X[,2]) - bin.width/2, max(X[,2]) + bin.width, by = bin.width)
@@ -179,7 +179,7 @@ optrdd.new = function(X,
     if (use.spline) {
         if (is.null(spline.df)) {
             if (optimizer == "mosek") {
-                spline.df = c(100, 60)[nvar]
+                spline.df = c(100, 45 - 15 * cate.at.pt)[nvar]
             } else {
                 spline.df = c(40, 10)[nvar]
             }
@@ -189,8 +189,6 @@ optrdd.new = function(X,
             use.spline = FALSE
         }
     }
-    
-    print(use.spline)
     
     if (use.spline) {
         if (nvar == 1) {
@@ -209,7 +207,7 @@ optrdd.new = function(X,
         selector.0 = selector.0 %*% basis.mat
         selector.1 = selector.1 %*% basis.mat
         centering.matrix = centering.matrix %*% basis.mat
-        num.df = spline.df
+        num.df = ncol(basis.mat)
     } else {
         num.df = num.bucket
     }
@@ -277,8 +275,6 @@ optrdd.new = function(X,
     gamma.0 = rep(0, num.bucket)
     gamma.1 = rep(0, num.bucket)
     
-    print(dim(Amat))
-    
     if (optimizer == "quadprog") {
         
         # For quadprog, we need Dmat to be positive definite, which is why we add a small number to the diagonal.
@@ -341,6 +337,10 @@ optrdd.new = function(X,
     gamma[W==0] = as.numeric(Matrix::t(bucket.map[,which(W==0)]) %*% gamma.0)
     gamma[W==1] = as.numeric(Matrix::t(bucket.map[,which(W==1)]) %*% gamma.1)
     
+    # Patch up numerical inaccuracies
+    gamma[W==0] = -gamma[W==0] / sum(gamma[W==0])
+    gamma[W==1] = gamma[W==1] / sum(gamma[W==1])
+    
     # Compute the worst-case imbalance...
     max.bias = max.second.derivative * t.hat
     
@@ -351,12 +351,12 @@ optrdd.new = function(X,
         tau.hat = sum(gamma * Y)
         
         if (use.homoskedatic.variance) {
-            se.hat.tau = sqrt(sum(gamma^2 * sigma.sq / num.samples))
+            se.hat.tau = sqrt(sum(gamma^2 * sigma.sq))
         } else {
             # A heteroskedaticity-robust variance estimate
             regr.df = data.frame(X=X, W=W, Y=Y)
             Y.fit = lm(Y ~ X * W, data = regr.df)
-            Y.resid.sq = (Y - predict(Y.fit))^2 * length(W) / (length(W) - 4)
+            Y.resid.sq = (Y - predict(Y.fit))^2 * length(W) / (length(W) - 2 * (1 + nvar))
             se.hat.tau = sqrt(sum(Y.resid.sq * gamma^2))
         }
         
