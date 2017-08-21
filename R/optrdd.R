@@ -26,7 +26,9 @@ optrdd.new = function(X,
                       alpha = 0.95,
                       lambda.mult = 1,
                       bin.width = NULL,
-                      use.homoskedatic.variance = FALSE) {
+                      use.homoskedatic.variance = FALSE,
+                      use.spline = TRUE,
+                      spline.df = NULL) {
     
     n = length(W)
     if (class(W) == "logical") W = as.numeric(W)
@@ -57,7 +59,7 @@ optrdd.new = function(X,
     if (nvar == 1) {
         
         if (is.null(bin.width)) {
-            bin.width = (max(X[,1]) - min(X[,1])) / 60
+            bin.width = (max(X[,1]) - min(X[,1])) / 400
         }
         breaks = seq(min(X[,1]) - bin.width/2, max(X[,1]) + bin.width, by = bin.width)
         xx.grid = breaks[-1] - bin.width/2
@@ -139,54 +141,96 @@ optrdd.new = function(X,
     num.realized.0 = length(realized.idx.0)
     num.realized.1 = length(realized.idx.1)
     
+    # These matrices map non-parametric dual parameters f_w(x) to buckets
+    # where gamma needs to be evaluated
+    selector.0 = Matrix::Diagonal(num.bucket, 1)[realized.idx.0,]
+    selector.1 = Matrix::Diagonal(num.bucket, 1)[realized.idx.1,]
+    
+    # We force centering.matrix %*% f_w(x) = 0, to ensure identification of f_w(x)
+    centering.matrix = Matrix::sparseMatrix(dims = c(length(zeroed.idx), num.bucket),
+                                            i = 1:length(zeroed.idx),
+                                            j = zeroed.idx,
+                                            x = rep(1, length(zeroed.idx)))
+    
+    if (use.spline) {
+      if (is.null(spline.df)) {
+        spline.df = 40 / nvar^2
+      }
+      if ((nvar == 1 && spline.df > nrow(xx.centered) / 2) |
+          (nvar == 2 && spline.df > min(length(xx1), length(xx2)) * 0.7)) {
+        use.spline = FALSE
+      }
+    }
+    
+    print(use.spline)
+    
+    if (use.spline) {
+      
+      if (nvar == 1) {
+        basis.mat.raw = splines::ns(xx.grid, df=spline.df, intercept = TRUE)
+        class(basis.mat.raw) = "matrix"
+        basis.mat = Matrix::Matrix(basis.mat.raw)
+      } else if (nvar == 2) {
+        basis.mat.1 = splines::ns(xx.grid[,1], df=spline.df, intercept = TRUE)
+        basis.mat.2 = splines::ns(xx.grid[,2], df=spline.df, intercept = TRUE)
+        basis.mat = Matrix::sparse.model.matrix(~ basis.mat.1:basis.mat.2 + 0)
+      } else {
+        stop("Not yet implemented for 3 or more running variables.")
+      }
+      
+      D2 = D2 %*% basis.mat
+      selector.0 = selector.0 %*% basis.mat
+      selector.1 = selector.1 %*% basis.mat
+      centering.matrix = centering.matrix %*% basis.mat
+      num.df = spline.df
+    } else {
+      basis.mat = Matrix::Diagonal(num.bucket, 1)
+      num.df = num.bucket
+    }
+    
     # solution to opt problem is (G(0), G(1), lambda, f0, f1)
     num.lambda = 3 + nvar *(1 + cate.at.pt)
-    num.params = num.realized.0 + num.realized.1 + num.lambda + (1 + cate.at.pt) * num.bucket
-    Dmat = Matrix::Diagonal(num.params,
-                            c((X.counts[realized.idx.0] - W.counts[realized.idx.0]) / 2 / sigma.sq,
-                              (W.counts[realized.idx.1]) / 2 / sigma.sq,
-                              1 / max.second.derivative^2 / 2,
-                              rep(0, num.lambda - 1 + (1 + cate.at.pt) * ncol(D2)))
-                            + 0.000000000001)
+    num.params = num.realized.0 + num.realized.1 + num.lambda + (1 + cate.at.pt) * num.df
+    Dmat.diagonal = c((X.counts[realized.idx.0] - W.counts[realized.idx.0]) / 2 / sigma.sq,
+                      (W.counts[realized.idx.1]) / 2 / sigma.sq,
+                      lambda.mult / max.second.derivative^2 / 2,
+                      rep(0, num.lambda - 1 + (1 + cate.at.pt) * num.df))
+    Dmat = Matrix::Diagonal(num.params, Dmat.diagonal + 0.000000000001)
     dvec = c(rep(0, num.realized.0 + num.realized.1 + 1), -1, 1,
-             rep(0, num.lambda - 3 + (1 + cate.at.pt) * ncol(D2)))
+             rep(0, num.lambda - 3 + (1 + cate.at.pt) * num.df))
     Amat = Matrix::t(rbind(
         cbind(Matrix::Diagonal(num.realized.0, -1),
               Matrix::Matrix(0, num.realized.0, num.realized.1),
               0, 0, 1, xx.centered[realized.idx.0,],
               if(cate.at.pt) { -xx.centered[realized.idx.0,] } else { numeric() },
-              Matrix::Diagonal(num.bucket, 1)[realized.idx.0,],
-              if(cate.at.pt) { Matrix::Matrix(0, num.realized.0, num.bucket) } else { numeric() }),
+              selector.0,
+              if(cate.at.pt) { Matrix::Matrix(0, num.realized.0, num.df) } else { numeric() }),
         cbind(Matrix::Matrix(0, num.realized.1, num.realized.0),
               Matrix::Diagonal(num.realized.1, -1),
               0, 1, 0, xx.centered[realized.idx.1,],
               if(cate.at.pt) { xx.centered[realized.idx.1,] } else { numeric() },
               if(cate.at.pt) {
-                  cbind(Matrix::Matrix(0, num.realized.1, num.bucket),
-                        Matrix::Diagonal(num.bucket, 1)[realized.idx.1,])
+                  cbind(Matrix::Matrix(0, num.realized.1, num.df), selector.1)
               } else {
-                  Matrix::Diagonal(num.bucket, 1)[realized.idx.1,]
+                  selector.1
               }),
-        Matrix::sparseMatrix(dims = c(length(zeroed.idx), num.params),
-                             i = 1:length(zeroed.idx),
-                             j = num.realized.0 + num.realized.1 + num.lambda + zeroed.idx,
-                             x = rep(1, length(zeroed.idx))),
+        cbind(Matrix::Matrix(0, length(zeroed.idx), num.realized.0 + num.realized.1 + num.lambda),
+              centering.matrix,
+              Matrix::Matrix(0, length(zeroed.idx), as.numeric(cate.at.pt) * num.df)),
         if(cate.at.pt) {
-            Matrix::sparseMatrix(dims = c(length(zeroed.idx), num.params),
-                                 i = 1:length(zeroed.idx),
-                                 j = num.realized.0 + num.realized.1 + num.lambda + num.bucket + zeroed.idx,
-                                 x = rep(1, length(zeroed.idx)))
+          cbind(Matrix::Matrix(0, length(zeroed.idx), num.realized.0 + num.realized.1 + num.lambda + num.df),
+                centering.matrix)
         } else { numeric() },
-        c(rep(0, num.realized.0 + num.realized.1), 1, rep(0, num.lambda - 1 + (1 + cate.at.pt) * ncol(D2))),
+        c(rep(0, num.realized.0 + num.realized.1), 1, rep(0, num.lambda - 1 + (1 + cate.at.pt) * num.df)),
         cbind(Matrix::Matrix(0, 2 * nrow(D2), num.realized.0 + num.realized.1),
               bin.width^2,
               matrix(0, 2 * nrow(D2), num.lambda - 1),
               rbind(D2, -D2),
-              if (cate.at.pt) { Matrix::Matrix(0, 2 * nrow(D2), num.bucket) } else { numeric() }),
+              if (cate.at.pt) { Matrix::Matrix(0, 2 * nrow(D2), num.df) } else { numeric() }),
         if (cate.at.pt) {
             cbind(Matrix::Matrix(0, 2 * nrow(D2), num.realized.0 + num.realized.1),
                   bin.width^2,
-                  matrix(0, 2 * nrow(D2), num.lambda - 1 + num.bucket),
+                  matrix(0, 2 * nrow(D2), num.lambda - 1 + num.df),
                   rbind(D2, -D2))
         }))
     
@@ -208,9 +252,6 @@ optrdd.new = function(X,
     # Compute the worst-case imbalance...
     t.hat = soln$solution[num.realized.0 + num.realized.1 + 1] / (2 * max.second.derivative^2)
     max.bias = max.second.derivative * t.hat
-    
-    ff = soln$solution[num.realized.0 + num.realized.1 + num.lambda + 1:num.bucket]
-    plot(ff + soln$solution[num.realized.0 + num.realized.1 + 3] + (soln$solution[num.realized.0 + num.realized.1 + 4] - soln$solution[num.realized.0 + num.realized.1 + 5]) * xx.centered)
     
     # If outcomes are provided, also compute confidence intervals for tau.
     if (!is.null(Y)) {
