@@ -17,6 +17,7 @@ Y = 10 + 20 * X + rnorm(n)
 rdd = optrdd(X, Y = Y, max.second.derivative, max.window = 1)
 
 good.idx = which(abs(X) <= 1)
+rdd.free = optrdd.new(X=X[good.idx], Y=Y[good.idx], W=(X[good.idx] >= 0), max.second.derivative = max.second.derivative)
 rdd.new = optrdd.new(X=X[good.idx], Y=Y[good.idx], W=(X[good.idx] >= 0), center = 0, max.second.derivative = max.second.derivative)
 
 test_that("optrdd gammas satisfy constraints", {

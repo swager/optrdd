@@ -57,7 +57,7 @@ optrdd.new = function(X,
     if (nvar == 1) {
         
         if (is.null(bin.width)) {
-            bin.width = (max(X[,1]) - min(X[,1])) / 400
+            bin.width = (max(X[,1]) - min(X[,1])) / 200
         }
         breaks = seq(min(X[,1]) - bin.width/2, max(X[,1]) + bin.width, by = bin.width)
         xx.grid = breaks[-1] - bin.width/2
@@ -108,16 +108,16 @@ optrdd.new = function(X,
             rbind(
                 if (!edge.1) {
                     cbind(j=(i1 - 1):(i1 + 1) + (i2 - 1) * length(xx1),
-                          x=c(1, -2, 1) / bin.width^2)
+                          x=c(1, -2, 1))
                 } else { numeric() },
                 if (!edge.2) {
                     cbind(j=i1 + ((i2 - 2):i2) * length(xx1),
-                          x=c(1, -2, 1) / bin.width^2)
+                          x=c(1, -2, 1))
                 } else { numeric() },
                 if (!(edge.1 | edge.2)) {
                     cbind(j = c((i1 - 1):(i1 + 1) + ((i2 - 2):i2) * length(xx1),
                                 (i1 - 1):(i1 + 1) + (i2:(i2 - 2)) * length(xx1)),
-                          x = c(c(1/2, -1, 1/2) / bin.width^2, c(1/2, -1, 1/2) / bin.width^2))
+                          x = c(c(1/2, -1, 1/2), c(1/2, -1, 1/2)))
                 } else { numeric() })
         }))
         D2.i = c(t(matrix(rep(1:(nrow(D2.entries)/3), 3), ncol = 3)))
@@ -143,7 +143,7 @@ optrdd.new = function(X,
     Dmat = Matrix::Diagonal(num.params,
                             c((X.counts[realized.idx.0] - W.counts[realized.idx.0]) / 2 / sigma.sq,
                               (W.counts[realized.idx.1]) / 2 / sigma.sq,
-                              max.second.derivative^2 / 2,
+                              1 / max.second.derivative^2 / 2,
                               rep(0, num.lambda - 1 + (1 + cate.at.pt) * ncol(D2)))
                             + 0.0000000001)
     dvec = c(rep(0, num.realized.0 + num.realized.1 + 1), -1, 1,
@@ -178,14 +178,14 @@ optrdd.new = function(X,
             numeric()
         },
         c(rep(0, num.realized.0 + num.realized.1), 1, rep(0, num.lambda - 1 + (1 + cate.at.pt) * ncol(D2))),
-        cbind(matrix(0, 2 * nrow(D2), num.realized.0 + num.realized.1),
-              bin.width^2 * max.second.derivative,
+        cbind(Matrix::Matrix(0, 2 * nrow(D2), num.realized.0 + num.realized.1),
+              bin.width^2,
               matrix(0, 2 * nrow(D2), num.lambda - 1),
               rbind(D2, -D2),
               if (cate.at.pt) { matrix(0, 2 * nrow(D2), num.bucket) } else { numeric() }),
         if (cate.at.pt) {
-            cbind(matrix(0, 2 * nrow(D2), num.realized.0 + num.realized.1),
-                  bin.width^2 * max.second.derivative,
+            cbind(Matrix::Matrix(0, 2 * nrow(D2), num.realized.0 + num.realized.1),
+                  bin.width^2,
                   matrix(0, 2 * nrow(D2), num.lambda - 1 + num.bucket),
                   rbind(D2, -D2))
         }))
@@ -202,11 +202,14 @@ optrdd.new = function(X,
     
     # Now map this x-wise function into a weight for each observation
     gamma = rep(0, length(W))
-    gamma[W==0] = as.numeric(Matrix::t(bucket.map[,W==0]) %*% gamma.0)
-    gamma[W==1] = as.numeric(Matrix::t(bucket.map[,W==1]) %*% gamma.1)
+    gamma[W==0] = as.numeric(Matrix::t(bucket.map[,which(W==0)]) %*% gamma.0)
+    gamma[W==1] = as.numeric(Matrix::t(bucket.map[,which(W==1)]) %*% gamma.1)
     
     # Compute the worst-case imbalance...
-    max.bias = soln$solution[num.realized.0 + num.realized.1 + 1] / (2 * max.second.derivative^2)
+    t.hat = soln$solution[num.realized.0 + num.realized.1 + 1] / (2 * max.second.derivative^2)
+    max.bias = max.second.derivative * t.hat
+    
+    ff = soln$solution[num.realized.0 + num.realized.1 + num.lambda + 1:num.bucket]
     
     # If outcomes are provided, also compute confidence intervals for tau.
     if (!is.null(Y)) {
