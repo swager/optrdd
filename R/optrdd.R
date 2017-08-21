@@ -14,7 +14,7 @@
 #' @param lambda.mult Optional multplier that can be used to over- or under-penalize variance.
 #' @param bin.width Bin width for discrete approximation.
 #' @param use.homoskedatic.variance Whether confidence intervals should be built assuming homoskedasticity.
-#' @param use.spline Whether non-parametric components should be modeled as cubic splines
+#' @param use.spline Whether non-parametric components should be modeled as quadratic splines
 #'                   in order to reduce the number of optimization parameters, and potentially
 #'                   improving computational performance.
 #' @param spline.df Number of degrees of freedom (per running variable) used for spline computation.
@@ -38,21 +38,20 @@ optrdd.new = function(X,
                       use.spline = TRUE,
                       spline.df = NULL,
                       optimizer = c("mosek", "quadprog"),
-                      verbose = FALSE) {
+                      verbose = TRUE) {
     
-  
-  optimizer = match.arg(optimizer)
-  
-  if (optimizer == "mosek") {
-    if (!suppressWarnings(require("Rmosek", quietly = TRUE))) {
-        warning(paste("The mosek optimizer is not installed; using quadprog instead.",
-                      "This may be very slow, especially if high numerical precision is required",
-                      "or with more than one running variable.",
-                      "Setting a small value of spline.df may speed up the solver"))
-        optimizer = "quadprog"
-    }
-  }  
-  
+    optimizer = match.arg(optimizer)
+    
+    if (optimizer == "mosek") {
+        if (!suppressWarnings(require("Rmosek", quietly = TRUE))) {
+            warning(paste("The mosek optimizer is not installed; using quadprog instead.",
+                          "This may be very slow, especially if high numerical precision is required",
+                          "or with more than one running variable.",
+                          "Setting a small value of spline.df may speed up the solver"))
+            optimizer = "quadprog"
+        }
+    }  
+    
     n = length(W)
     if (class(W) == "logical") W = as.numeric(W)
     if (!is.null(Y) & (length(Y) != n)) { stop("Y and W must have same length.") }
@@ -78,16 +77,16 @@ optrdd.new = function(X,
     
     # Create discrete grid on which to optimize, and assign each training example
     # to a cell.
-    
     if (nvar == 1) {
         
         if (is.null(bin.width)) {
-            bin.width = (max(X[,1]) - min(X[,1])) / 400
+            bin.width = (max(X[,1]) - min(X[,1])) / 2000
         }
         breaks = seq(min(X[,1]) - bin.width/2, max(X[,1]) + bin.width, by = bin.width)
         xx.grid = breaks[-1] - bin.width/2
         num.bucket = length(xx.grid)
         
+        xx.grid = matrix(xx.grid - center, ncol = 1)
         xx.centered = matrix(xx.grid - center, ncol = 1)
         zeroed.idx = max(which(xx.centered < 0)) + c(0, 1)
         
@@ -96,7 +95,7 @@ optrdd.new = function(X,
     } else if (nvar == 2) {
         
         if (is.null(bin.width)) {
-            bin.width = sqrt((max(X[,1]) - min(X[,1])) * (max(X[,2]) - min(X[,2])) / 400)
+            bin.width = sqrt((max(X[,1]) - min(X[,1])) * (max(X[,2]) - min(X[,2])) / 4000)
         }
         breaks1 = seq(min(X[,1]) - bin.width/2, max(X[,1]) + bin.width, by = bin.width)
         breaks2 = seq(min(X[,2]) - bin.width/2, max(X[,2]) + bin.width, by = bin.width)
@@ -118,8 +117,8 @@ optrdd.new = function(X,
         stop("Not yet implemented for 3 or more running variables.")
     }
     
-    # Define matrix of constraints
-    # D2 is a raw curvature matrix, not accounting for bin.width
+    # Define matrix of constraints.
+    # D2 is a raw curvature matrix, not accounting for bin.width.
     if (nvar == 1) {
         D2 = Matrix::bandSparse(n=num.bucket-2, m=num.bucket, k = c(0, 1, 2),
                                 diag = list(rep(1, num.bucket), rep(-2, num.bucket))[c(1, 2, 1)])
@@ -175,58 +174,72 @@ optrdd.new = function(X,
                                             j = zeroed.idx,
                                             x = rep(1, length(zeroed.idx)))
     
+    # Computational performance can be improved by representing non-parametric
+    # components in a quadratic spline basis.
     if (use.spline) {
-      if (is.null(spline.df)) {
-        spline.df = 40 / nvar^2
-      }
-      if ((nvar == 1 && spline.df > nrow(xx.centered) / 2) |
-          (nvar == 2 && spline.df > min(length(xx1), length(xx2)) * 0.7)) {
-        use.spline = FALSE
-      }
+        if (is.null(spline.df)) {
+            if (optimizer == "mosek") {
+                spline.df = c(100, 60)[nvar]
+            } else {
+                spline.df = c(40, 10)[nvar]
+            }
+        }
+        if ((nvar == 1 && spline.df > nrow(xx.centered) / 2) |
+            (nvar == 2 && spline.df > min(length(xx1), length(xx2)) * 0.7)) {
+            use.spline = FALSE
+        }
     }
     
     print(use.spline)
     
     if (use.spline) {
-      
-      if (nvar == 1) {
-        basis.mat.raw = splines::ns(xx.grid, df=spline.df, intercept = TRUE)
-        class(basis.mat.raw) = "matrix"
-        basis.mat = Matrix::Matrix(basis.mat.raw)
-      } else if (nvar == 2) {
-        basis.mat.1 = splines::ns(xx.grid[,1], df=spline.df, intercept = TRUE)
-        basis.mat.2 = splines::ns(xx.grid[,2], df=spline.df, intercept = TRUE)
-        basis.mat = Matrix::sparse.model.matrix(~ basis.mat.1:basis.mat.2 + 0)
-      } else {
-        stop("Not yet implemented for 3 or more running variables.")
-      }
-      
-      D2 = D2 %*% basis.mat
-      selector.0 = selector.0 %*% basis.mat
-      selector.1 = selector.1 %*% basis.mat
-      centering.matrix = centering.matrix %*% basis.mat
-      num.df = spline.df
+        if (nvar == 1) {
+            basis.mat.raw = splines::bs(xx.grid, degree = 2, df=spline.df, intercept = TRUE)
+            class(basis.mat.raw) = "matrix"
+            basis.mat = Matrix::Matrix(basis.mat.raw)
+        } else if (nvar == 2) {
+            basis.mat.1 = splines::bs(xx.grid[,1], degree = 2, df=spline.df, intercept = TRUE)
+            basis.mat.2 = splines::bs(xx.grid[,2], degree = 2, df=spline.df, intercept = TRUE)
+            basis.mat = Matrix::sparse.model.matrix(~ basis.mat.1:basis.mat.2 + 0)
+        } else {
+            stop("Not yet implemented for 3 or more running variables.")
+        }
+        
+        D2 = D2 %*% basis.mat
+        selector.0 = selector.0 %*% basis.mat
+        selector.1 = selector.1 %*% basis.mat
+        centering.matrix = centering.matrix %*% basis.mat
+        num.df = spline.df
     } else {
-      basis.mat = Matrix::Diagonal(num.bucket, 1)
-      num.df = num.bucket
+        num.df = num.bucket
     }
     
-    # solution to opt problem is (G(0), G(1), lambda, f0, f1)
+    # We now prepare inputs to a numerical optimizer. We seek to
+    # solve a discretized version of equation (18) from Imbens and Wager (2017).
+    # The parameters to the problem are ordered as (G(0), G(1), lambda, f0, f1).
     num.lambda = 3 + nvar *(1 + cate.at.pt)
     num.params = num.realized.0 + num.realized.1 + num.lambda + (1 + cate.at.pt) * num.df
+    
+    # The quadratic component of the objective is 1/2 sum_j Dmat.diagonal_j * params_j^2
     Dmat.diagonal = c((X.counts[realized.idx.0] - W.counts[realized.idx.0]) / 2 / sigma.sq,
                       (W.counts[realized.idx.1]) / 2 / sigma.sq,
                       lambda.mult / max.second.derivative^2 / 2,
                       rep(0, num.lambda - 1 + (1 + cate.at.pt) * num.df))
+    # The linear component of the objective is sum(dvec * params)
     dvec = c(rep(0, num.realized.0 + num.realized.1 + 1), 1, -1,
              rep(0, num.lambda - 3 + (1 + cate.at.pt) * num.df))
+    # We now impose constrains on Amat %*% params.
+    # The first meq constrains are equality constraints (Amat %*% params = 0);
+    # the remaining ones are inequalities (Amat %*% params >= 0).
     Amat = Matrix::rBind(
+        # Defines G(0) in terms of the other problem parameters (equality constraint)
         cbind(Matrix::Diagonal(num.realized.0, -1),
               Matrix::Matrix(0, num.realized.0, num.realized.1),
               0, 0, 1, xx.centered[realized.idx.0,],
               if(cate.at.pt) { -xx.centered[realized.idx.0,] } else { numeric() },
               selector.0,
               if(cate.at.pt) { Matrix::Matrix(0, num.realized.0, num.df) } else { numeric() }),
+        # Defines G(1) in terms of the other problem parameters (equality constraint)
         cbind(Matrix::Matrix(0, num.realized.1, num.realized.0),
               Matrix::Diagonal(num.realized.1, -1),
               0, 1, 0, xx.centered[realized.idx.1,],
@@ -236,19 +249,21 @@ optrdd.new = function(X,
               } else {
                   selector.1
               }),
+        # Ensure that f_w(c), f'_w(c) = 0
         cbind(Matrix::Matrix(0, length(zeroed.idx), num.realized.0 + num.realized.1 + num.lambda),
               centering.matrix,
               Matrix::Matrix(0, length(zeroed.idx), as.numeric(cate.at.pt) * num.df)),
         if(cate.at.pt) {
-          cbind(Matrix::Matrix(0, length(zeroed.idx), num.realized.0 + num.realized.1 + num.lambda + num.df),
-                centering.matrix)
+            cbind(Matrix::Matrix(0, length(zeroed.idx), num.realized.0 + num.realized.1 + num.lambda + num.df),
+                  centering.matrix)
         } else { numeric() },
-        c(rep(0, num.realized.0 + num.realized.1), 1, rep(0, num.lambda - 1 + (1 + cate.at.pt) * num.df)),
+        # Bound the second derivative of f_0 by lambda_1
         cbind(Matrix::Matrix(0, 2 * nrow(D2), num.realized.0 + num.realized.1),
               bin.width^2,
               matrix(0, 2 * nrow(D2), num.lambda - 1),
               rbind(D2, -D2),
               if (cate.at.pt) { Matrix::Matrix(0, 2 * nrow(D2), num.df) } else { numeric() }),
+        # Bound the second derivative of f_1 by lambda_1
         if (cate.at.pt) {
             cbind(Matrix::Matrix(0, 2 * nrow(D2), num.realized.0 + num.realized.1),
                   bin.width^2,
@@ -262,61 +277,63 @@ optrdd.new = function(X,
     gamma.0 = rep(0, num.bucket)
     gamma.1 = rep(0, num.bucket)
     
+    print(dim(Amat))
+    
     if (optimizer == "quadprog") {
-      
-      # For quadprog, we need Dmat to be positive definite, which is why we add a small number to the diagonal.
-      # The conic implementation via mosek does not have this issue.
-      soln = quadprog::solve.QP(Matrix::Diagonal(num.params, Dmat.diagonal + 0.000000000001),
-                                -dvec,
-                                Matrix::t(Amat),
-                                bvec,
-                                meq=meq)
-      
-      gamma.0[realized.idx.0] = - soln$solution[1:num.realized.0] / sigma.sq / 2
-      gamma.1[realized.idx.1] = - soln$solution[num.realized.0 + 1:num.realized.1] / sigma.sq / 2
-      t.hat = soln$solution[num.realized.0 + num.realized.1 + 1] / (2 * max.second.derivative^2)
-      
+        
+        # For quadprog, we need Dmat to be positive definite, which is why we add a small number to the diagonal.
+        # The conic implementation via mosek does not have this issue.
+        soln = quadprog::solve.QP(Matrix::Diagonal(num.params, Dmat.diagonal + 0.000000000001),
+                                  -dvec,
+                                  Matrix::t(Amat),
+                                  bvec,
+                                  meq=meq)
+        
+        gamma.0[realized.idx.0] = - soln$solution[1:num.realized.0] / sigma.sq / 2
+        gamma.1[realized.idx.1] = - soln$solution[num.realized.0 + 1:num.realized.1] / sigma.sq / 2
+        t.hat = soln$solution[num.realized.0 + num.realized.1 + 1] / (2 * max.second.derivative^2)
+        
     } else if (optimizer == "mosek") {
-      
-      # We need to rescale our optimization parameters, such that Dmat has only
-      # ones and zeros on the diagonal; i.e.,
-      A.natural = Amat %*% Matrix::Diagonal(ncol(Amat), x=1/sqrt(Dmat.diagonal + as.numeric(Dmat.diagonal == 0)))
-      
-      mosek.problem <- list()
-
-      # The A matrix relates parameters to constraints, via
-      # blc <= A * { params } <= buc, and blx <= params <= bux
-      # The conic fomulation adds two additional parameters to the problem, namely
-      # a parameter "S" and "ONE", that are characterized by a second-order cone constraint
-      # S * ONE >= 1/2 {params}' Dmat {params},
-      # and the equality constraint ONE = 1
-      mosek.problem$A <- Matrix::cBind(A.natural, Matrix::Matrix(0, nrow(A.natural), 2))
-      mosek.problem$bc <- rbind(blc = rep(0, nrow(A.natural)), buc = c(rep(0, meq), rep(Inf, nrow(A.natural) - meq)))
-      mosek.problem$bx <- rbind(blx = c(rep(-Inf, ncol(A.natural)), 0, 1), bux = c(rep(Inf, ncol(A.natural)), Inf, 1))
-
-      # This is the cone constraint
-      mosek.problem$cones <- cbind(list("RQUAD", c(ncol(Amat) + 1, ncol(Amat) + 2, which(Dmat.diagonal != 0))))
-      
-      # We seek to minimize c * {params}
-      mosek.problem$sense <- "min"
-      mosek.problem$c <- c(dvec, 1, 0)
-      
-      if (verbose) {
-        mosek.out = Rmosek::mosek(mosek.problem)
-      } else {
-        mosek.out = Rmosek::mosek(mosek.problem, opts=list(verbose=0))
-      }
-      
-      # We now also need to re-adjust for "natural" scaling
-      gamma.0[realized.idx.0] = - mosek.out$sol$itr$xx[1:num.realized.0] / sigma.sq / 2 /
-        sqrt(Dmat.diagonal[1:num.realized.0])
-      gamma.1[realized.idx.1] = - mosek.out$sol$itr$xx[num.realized.0 + 1:num.realized.1] / sigma.sq / 2 /
-        sqrt(Dmat.diagonal[num.realized.0 + 1:num.realized.1])
-      t.hat = mosek.out$sol$itr$xx[num.realized.0 + num.realized.1 + 1] / (2 * max.second.derivative^2) /
-        sqrt(Dmat.diagonal[num.realized.0 + num.realized.1 + 1])
-      
+        
+        # We need to rescale our optimization parameters, such that Dmat has only
+        # ones and zeros on the diagonal; i.e.,
+        A.natural = Amat %*% Matrix::Diagonal(ncol(Amat), x=1/sqrt(Dmat.diagonal + as.numeric(Dmat.diagonal == 0)))
+        
+        mosek.problem <- list()
+        
+        # The A matrix relates parameters to constraints, via
+        # blc <= A * { params } <= buc, and blx <= params <= bux
+        # The conic fomulation adds two additional parameters to the problem, namely
+        # a parameter "S" and "ONE", that are characterized by a second-order cone constraint
+        # S * ONE >= 1/2 {params}' Dmat {params},
+        # and the equality constraint ONE = 1
+        mosek.problem$A <- Matrix::cBind(A.natural, Matrix::Matrix(0, nrow(A.natural), 2))
+        mosek.problem$bc <- rbind(blc = rep(0, nrow(A.natural)), buc = c(rep(0, meq), rep(Inf, nrow(A.natural) - meq)))
+        mosek.problem$bx <- rbind(blx = c(rep(-Inf, ncol(A.natural)), 0, 1), bux = c(rep(Inf, ncol(A.natural)), Inf, 1))
+        
+        # This is the cone constraint
+        mosek.problem$cones <- cbind(list("RQUAD", c(ncol(Amat) + 1, ncol(Amat) + 2, which(Dmat.diagonal != 0))))
+        
+        # We seek to minimize c * {params}
+        mosek.problem$sense <- "min"
+        mosek.problem$c <- c(dvec, 1, 0)
+        
+        if (verbose) {
+            mosek.out = Rmosek::mosek(mosek.problem)
+        } else {
+            mosek.out = Rmosek::mosek(mosek.problem, opts=list(verbose=0))
+        }
+        
+        # We now also need to re-adjust for "natural" scaling
+        gamma.0[realized.idx.0] = - mosek.out$sol$itr$xx[1:num.realized.0] / sigma.sq / 2 /
+            sqrt(Dmat.diagonal[1:num.realized.0])
+        gamma.1[realized.idx.1] = - mosek.out$sol$itr$xx[num.realized.0 + 1:num.realized.1] / sigma.sq / 2 /
+            sqrt(Dmat.diagonal[num.realized.0 + 1:num.realized.1])
+        t.hat = mosek.out$sol$itr$xx[num.realized.0 + num.realized.1 + 1] / (2 * max.second.derivative^2) /
+            sqrt(Dmat.diagonal[num.realized.0 + num.realized.1 + 1])
+        
     } else {
-      stop("Optimizer choice not valid.")
+        stop("Optimizer choice not valid.")
     }
     
     # Now map the x-wise functions into a weight for each observation
@@ -357,11 +374,10 @@ optrdd.new = function(X,
                max.bias = max.bias,
                sampling.se=se.hat.tau,
                gamma=gamma,
-               gamma.fun.0 = data.frame(xx=xx.grid[realized.idx.0],
+               gamma.fun.0 = data.frame(xx=xx.grid[realized.idx.0,],
                                         gamma=gamma.0[realized.idx.0]),
-               gamma.fun.1 = data.frame(xx=xx.grid[realized.idx.1],
+               gamma.fun.1 = data.frame(xx=xx.grid[realized.idx.1,],
                                         gamma=gamma.1[realized.idx.1]))
     class(ret) = "optrdd"
     return(ret)
 }
-

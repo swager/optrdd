@@ -6,7 +6,8 @@
 \usage{
 optrdd.new(X, Y = NULL, W, max.second.derivative, center = NULL,
   sigma.sq = NULL, alpha = 0.95, lambda.mult = 1, bin.width = NULL,
-  use.homoskedatic.variance = FALSE)
+  use.homoskedatic.variance = FALSE, use.spline = TRUE, spline.df = NULL,
+  optimizer = c("mosek", "quadprog"), verbose = TRUE)
 }
 \arguments{
 \item{X}{The running variables.}
@@ -29,6 +30,18 @@ a weighted CATE, with weights chosen to minimize MSE (see Section 4.1 of paper).
 \item{bin.width}{Bin width for discrete approximation.}
 
 \item{use.homoskedatic.variance}{Whether confidence intervals should be built assuming homoskedasticity.}
+
+\item{use.spline}{Whether non-parametric components should be modeled as quadratic splines
+in order to reduce the number of optimization parameters, and potentially
+improving computational performance.}
+
+\item{spline.df}{Number of degrees of freedom (per running variable) used for spline computation.}
+
+\item{optimizer}{Which optimizer to use? Mosek is a commercial solver, but free
+academic licenses are available. Needs to be installed separately.
+Quadprog is the default R solver, and may be slower.}
+
+\item{verbose}{whether the optimizer should print progress information}
 }
 \value{
 A trained optrdd object.
