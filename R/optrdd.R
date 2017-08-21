@@ -14,6 +14,14 @@
 #' @param lambda.mult Optional multplier that can be used to over- or under-penalize variance.
 #' @param bin.width Bin width for discrete approximation.
 #' @param use.homoskedatic.variance Whether confidence intervals should be built assuming homoskedasticity.
+#' @param use.spline Whether non-parametric components should be modeled as cubic splines
+#'                   in order to reduce the number of optimization parameters, and potentially
+#'                   improving computational performance.
+#' @param spline.df Number of degrees of freedom (per running variable) used for spline computation.
+#' @param optimizer Which optimizer to use? Mosek is a commercial solver, but free
+#'                  academic licenses are available. Needs to be installed separately.
+#'                  Quadprog is the default R solver, and may be slower.
+#' @param verbose whether the optimizer should print progress information
 #'
 #' @return A trained optrdd object.
 #' @export
@@ -28,8 +36,23 @@ optrdd.new = function(X,
                       bin.width = NULL,
                       use.homoskedatic.variance = FALSE,
                       use.spline = TRUE,
-                      spline.df = NULL) {
+                      spline.df = NULL,
+                      optimizer = c("mosek", "quadprog"),
+                      verbose = FALSE) {
     
+  
+  optimizer = match.arg(optimizer)
+  
+  if (optimizer == "mosek") {
+    if (!suppressWarnings(require("Rmosek", quietly = TRUE))) {
+        warning(paste("The mosek optimizer is not installed; using quadprog instead.",
+                      "This may be very slow, especially if high numerical precision is required",
+                      "or with more than one running variable.",
+                      "Setting a small value of spline.df may speed up the solver"))
+        optimizer = "quadprog"
+    }
+  }  
+  
     n = length(W)
     if (class(W) == "logical") W = as.numeric(W)
     if (!is.null(Y) & (length(Y) != n)) { stop("Y and W must have same length.") }
@@ -195,10 +218,9 @@ optrdd.new = function(X,
                       (W.counts[realized.idx.1]) / 2 / sigma.sq,
                       lambda.mult / max.second.derivative^2 / 2,
                       rep(0, num.lambda - 1 + (1 + cate.at.pt) * num.df))
-    Dmat = Matrix::Diagonal(num.params, Dmat.diagonal + 0.000000000001)
-    dvec = c(rep(0, num.realized.0 + num.realized.1 + 1), -1, 1,
+    dvec = c(rep(0, num.realized.0 + num.realized.1 + 1), 1, -1,
              rep(0, num.lambda - 3 + (1 + cate.at.pt) * num.df))
-    Amat = Matrix::t(rbind(
+    Amat = Matrix::rBind(
         cbind(Matrix::Diagonal(num.realized.0, -1),
               Matrix::Matrix(0, num.realized.0, num.realized.1),
               0, 0, 1, xx.centered[realized.idx.0,],
@@ -232,25 +254,77 @@ optrdd.new = function(X,
                   bin.width^2,
                   matrix(0, 2 * nrow(D2), num.lambda - 1 + num.df),
                   rbind(D2, -D2))
-        }))
+        })
     
     meq = num.realized.0 + num.realized.1 + length(zeroed.idx) * (1 + cate.at.pt)
-    bvec = rep(0, ncol(Amat))
-    
-    soln = quadprog::solve.QP(Dmat, dvec, Amat, bvec, meq=meq, factorized=FALSE)
+    bvec = rep(0, nrow(Amat))
     
     gamma.0 = rep(0, num.bucket)
-    gamma.0[realized.idx.0] = - soln$solution[1:num.realized.0] / sigma.sq / 2
     gamma.1 = rep(0, num.bucket)
-    gamma.1[realized.idx.1] = - soln$solution[num.realized.0 + 1:num.realized.1] / sigma.sq / 2
     
-    # Now map this x-wise function into a weight for each observation
+    if (optimizer == "quadprog") {
+      
+      # For quadprog, we need Dmat to be positive definite, which is why we add a small number to the diagonal.
+      # The conic implementation via mosek does not have this issue.
+      soln = quadprog::solve.QP(Matrix::Diagonal(num.params, Dmat.diagonal + 0.000000000001),
+                                -dvec,
+                                Matrix::t(Amat),
+                                bvec,
+                                meq=meq)
+      
+      gamma.0[realized.idx.0] = - soln$solution[1:num.realized.0] / sigma.sq / 2
+      gamma.1[realized.idx.1] = - soln$solution[num.realized.0 + 1:num.realized.1] / sigma.sq / 2
+      t.hat = soln$solution[num.realized.0 + num.realized.1 + 1] / (2 * max.second.derivative^2)
+      
+    } else if (optimizer == "mosek") {
+      
+      # We need to rescale our optimization parameters, such that Dmat has only
+      # ones and zeros on the diagonal; i.e.,
+      A.natural = Amat %*% Matrix::Diagonal(ncol(Amat), x=1/sqrt(Dmat.diagonal + as.numeric(Dmat.diagonal == 0)))
+      
+      mosek.problem <- list()
+
+      # The A matrix relates parameters to constraints, via
+      # blc <= A * { params } <= buc, and blx <= params <= bux
+      # The conic fomulation adds two additional parameters to the problem, namely
+      # a parameter "S" and "ONE", that are characterized by a second-order cone constraint
+      # S * ONE >= 1/2 {params}' Dmat {params},
+      # and the equality constraint ONE = 1
+      mosek.problem$A <- Matrix::cBind(A.natural, Matrix::Matrix(0, nrow(A.natural), 2))
+      mosek.problem$bc <- rbind(blc = rep(0, nrow(A.natural)), buc = c(rep(0, meq), rep(Inf, nrow(A.natural) - meq)))
+      mosek.problem$bx <- rbind(blx = c(rep(-Inf, ncol(A.natural)), 0, 1), bux = c(rep(Inf, ncol(A.natural)), Inf, 1))
+
+      # This is the cone constraint
+      mosek.problem$cones <- cbind(list("RQUAD", c(ncol(Amat) + 1, ncol(Amat) + 2, which(Dmat.diagonal != 0))))
+      
+      # We seek to minimize c * {params}
+      mosek.problem$sense <- "min"
+      mosek.problem$c <- c(dvec, 1, 0)
+      
+      if (verbose) {
+        mosek.out = Rmosek::mosek(mosek.problem)
+      } else {
+        mosek.out = Rmosek::mosek(mosek.problem, opts=list(verbose=0))
+      }
+      
+      # We now also need to re-adjust for "natural" scaling
+      gamma.0[realized.idx.0] = - mosek.out$sol$itr$xx[1:num.realized.0] / sigma.sq / 2 /
+        sqrt(Dmat.diagonal[1:num.realized.0])
+      gamma.1[realized.idx.1] = - mosek.out$sol$itr$xx[num.realized.0 + 1:num.realized.1] / sigma.sq / 2 /
+        sqrt(Dmat.diagonal[num.realized.0 + 1:num.realized.1])
+      t.hat = mosek.out$sol$itr$xx[num.realized.0 + num.realized.1 + 1] / (2 * max.second.derivative^2) /
+        sqrt(Dmat.diagonal[num.realized.0 + num.realized.1 + 1])
+      
+    } else {
+      stop("Optimizer choice not valid.")
+    }
+    
+    # Now map the x-wise functions into a weight for each observation
     gamma = rep(0, length(W))
     gamma[W==0] = as.numeric(Matrix::t(bucket.map[,which(W==0)]) %*% gamma.0)
     gamma[W==1] = as.numeric(Matrix::t(bucket.map[,which(W==1)]) %*% gamma.1)
     
     # Compute the worst-case imbalance...
-    t.hat = soln$solution[num.realized.0 + num.realized.1 + 1] / (2 * max.second.derivative^2)
     max.bias = max.second.derivative * t.hat
     
     # If outcomes are provided, also compute confidence intervals for tau.
