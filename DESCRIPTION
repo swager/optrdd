@@ -4,15 +4,16 @@ Version: 0.0.0.1
 Authors@R: c(
   person("Guido", "Imbens", email = "imbens@stanford.edu", role = c("aut")),
   person("Stefan", "Wager", email = "swager@stanford.edu", role = c("aut", "cre")))
-Description: What the package does (one paragraph).
+Description: Optimized inference in regression discontinuity designs, as proposed by Imbens and Wager (2017).
 Depends:
     R (>= 3.0.1)
 Imports: quadprog,
-    splines
-Suggests: RMosek,
+    splines,
+    Matrix
+Suggests: Rmosek,
     RColorBrewer,
     testthat
-License: What license is it under?
+License: GPL-3
 Encoding: UTF-8
 LazyData: true
 RoxygenNote: 6.0.1

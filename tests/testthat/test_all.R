@@ -1,11 +1,5 @@
 set.seed(1)
 
-# Even though they aren't part of the package,
-# we still test baseline implementations used in
-# experiments.
-source("../../baselines/local.lin.reg.R")
-source("../../baselines/old.optrdd.R")
-
 max.second.derivative = 1
 K = 20
 vv = 1.27 * 1:20
@@ -42,8 +36,10 @@ test_that("cate constraint hurts", {
 })
 
 # Check implementation against legacy implementation
-rdd.old = optrdd.primal(X=X, Y=Y, threshold = 0, max.second.derivative = max.second.derivative)
 test_that("results match legacy implementation", {
+    skip_on_cran()
+    source("../../baselines/local.lin.reg.R")
+    rdd.old = optrdd.primal(X=X, Y=Y, threshold = 0, max.second.derivative = max.second.derivative)
     expect_equal(rdd.cate$tau.hat, rdd.old$tau.hat, tolerance = rdd.cate$tau.plusminus)
     expect_equal(rdd.cate$tau.plusminus, rdd.old$tau.plusminus, tolerance = 0.01)
 })
@@ -128,46 +124,39 @@ test_that("optimization strategies are equivalent", {
 })
 
 
-# Test baseline methods
-rectangle = llr(X, Y = Y, max.second.derivative, kernel = "rectangular", 
-                minimization.target = "mse", max.window = 1)
-
-test_that("rectangular kernel gammas satisfy constraints", {
+test_that("baseline local linear regression implementation works", {
+    
+    skip_on_cran()
+    source("../../baselines/old.optrdd.R")
+    rectangle = llr(X, Y = Y, max.second.derivative, kernel = "rectangular", 
+                    minimization.target = "mse", max.window = 1)
+    triangle = llr(X, Y = Y, max.second.derivative, kernel = "triangular", 
+                   minimization.target = "mse", max.window = 1)
+    
     half.bucket = min(rectangle$gamma.fun[-1, 1] -
                           rectangle$gamma.fun[-nrow(rectangle$gamma.fun), 1])
     expect_equal(sum(rectangle$gamma), 0)
     expect_equal(sum(rectangle$gamma * (X > 0)), 1)
     expect_equal(sum(rectangle$gamma * X), 0, tolerance = half.bucket)
     expect_equal(sum(rectangle$gamma * X * (X > 0)), 0, tolerance = half.bucket)
-})
-
-
-triangle = llr(X, Y = Y, max.second.derivative, kernel = "triangular", 
-               minimization.target = "mse", max.window = 1)
-
-test_that("triangular kernel gammas satisfy constraints", {
+    
     half.bucket = min(triangle$gamma.fun[-1, 1] -
                           triangle$gamma.fun[-nrow(triangle$gamma.fun), 1])
     expect_equal(sum(triangle$gamma), 0)
     expect_equal(sum(triangle$gamma * (X > 0)), 1)
     expect_equal(sum(triangle$gamma * X), 0, tolerance = half.bucket)
     expect_equal(sum(triangle$gamma * X * (X > 0)), 0, tolerance = half.bucket)
-})
-
-
-test_that("relative performance of methods is as expected", {
+    
     expect_true(rdd.cate$max.bias^2 + rdd.cate$sampling.se^2 <
                     triangle$max.bias^2 + triangle$sampling.se^2)
     expect_true(triangle$max.bias^2 + triangle$sampling.se^2 < 
                     rectangle$max.bias^2 + rectangle$sampling.se^2)
-})
-
-
-# Test sigma square estimation for llr
-triangle.fixed = llr(X, Y = Y, max.second.derivative, sigma.sq = 1, max.window = 1, 
-                     use.homoskedatic.variance = TRUE, kernel = "triangular", minimization.target = "mse")
-
-test_that("llr gets variance almost right", {
+    
+    # Test sigma square estimation for llr
+    triangle.fixed = llr(X, Y = Y, max.second.derivative, sigma.sq = 1, max.window = 1, 
+                         use.homoskedatic.variance = TRUE, kernel = "triangular",
+                         minimization.target = "mse")
+    
     expect_equal(triangle$tau.hat, triangle.fixed$tau.hat, tolerance = 0.05)
     expect_equal(triangle$tau.plusminus, triangle.fixed$tau.plusminus, 
                  tolerance = 0.05)

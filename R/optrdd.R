@@ -107,7 +107,7 @@ optrdd = function(X,
         
     
     if (optimizer == "mosek") {
-        if (!suppressWarnings(require("Rmosek", quietly = TRUE))) {
+        if (!requireNamespace("RColorBrewer", quietly = TRUE)) {
             optimizer = "quadprog"
             if (nvar >= 2) {
                 warning(paste("The mosek optimizer is not installed; using quadprog instead.",
@@ -124,7 +124,7 @@ optrdd = function(X,
             warning("Setting noise level to 1 as default...")
             sigma.sq = 1
         } else {
-            Y.hat = predict(lm(Y ~ X * W))
+            Y.hat = stats::predict(stats::lm(Y ~ X * W))
             sigma.sq = mean((Y - Y.hat)^2) * length(W) / (length(W) - 2 - 2 * nvar)
         }
     }
@@ -422,8 +422,9 @@ optrdd = function(X,
         } else {
             # A heteroskedaticity-robust variance estimate
             regr.df = data.frame(X=X, W=W, Y=Y)
-            Y.fit = lm(Y ~ X * W, data = regr.df)
-            Y.resid.sq = (Y - predict(Y.fit))^2 * length(W) / (length(W) - 2 * (1 + nvar))
+            Y.fit = stats::lm(Y ~ X * W, data = regr.df)
+            Y.resid.sq = (Y - stats::predict(Y.fit))^2 * length(W) /
+                (length(W) - 2 * (1 + nvar))
             se.hat.tau = sqrt(sum(Y.resid.sq * gamma^2))
         }
         
