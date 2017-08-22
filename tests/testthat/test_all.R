@@ -2,7 +2,8 @@
 
 max.second.derivative = 1
 K = 20
-supp = runif(K, -1, 1)
+vv = 1.27 * 1:20
+supp = 2 * (vv - trunc(vv)) - 1
 prob = rexp(K)
 prob = prob/sum(prob)
 
@@ -95,11 +96,11 @@ test_that("test plusminus function", {
 X.2d = cbind(X, runif(n, -1, 1))
 W = X.2d[, 1] < 0 | X.2d[, 2] < 0
 
-rdd.2d.free = optrdd(X=X.2d, Y=Y, W=W, max.second.derivative = max.second.derivative, verbose = FALSE)
-rdd.2d.cate = optrdd(X=X.2d, Y=Y, W=W, center = c(0, 0), max.second.derivative = max.second.derivative, verbose = FALSE)
+rdd.2d.free = optrdd(X=X.2d, Y=Y, W=W, max.second.derivative = max.second.derivative, verbose = FALSE, spline.df = 20, bin.width = 0.05)
+rdd.2d.cate = optrdd(X=X.2d, Y=Y, W=W, center = c(0, 0), max.second.derivative = max.second.derivative, verbose = FALSE, spline.df = 20, bin.width = 0.05)
 
 test_that("2d-optrdd gammas satisfy constraints", {
-    tol = rdd.2d.cate$gamma.fun.0[2,1] - rdd.2d.cate$gamma.fun.0[1,1]
+    tol = 0.05
     expect_equal(sum(rdd.2d.free$gamma), 0)
     expect_equal(sum(rdd.2d.free$gamma * W), 1)
     expect_equal(sum(rdd.2d.free$gamma * X.2d[, 1]), 0, tolerance = tol)
@@ -113,7 +114,7 @@ test_that("2d-optrdd gammas satisfy constraints", {
 })
 
 
-rdd.2d.free.raw = optrdd(X=X.2d, Y=Y, W=W, max.second.derivative = max.second.derivative, use.spline = FALSE, bin.width = 0.1, verbose = FALSE)
+rdd.2d.free.raw = optrdd(X=X.2d, Y=Y, W=W, max.second.derivative = max.second.derivative, use.spline = FALSE, bin.width = 0.05, verbose = FALSE)
 
 test_that("optimization strategies are equivalent", {
     expect_equal(rdd.2d.free$tau.hat, rdd.2d.free.raw$tau.hat, tolerance = rdd.2d.free$tau.plusminus)
@@ -149,8 +150,10 @@ test_that("triangular kernel gammas satisfy constraints", {
 
 
 test_that("relative performance of methods is as expected", {
-    expect_true(rdd.cate$tau.plusminus < triangle$tau.plusminus)
-    expect_true(triangle$tau.plusminus < rectangle$tau.plusminus)
+    expect_true(rdd.cate$max.bias^2 + rdd.cate$sampling.se^2 <
+                    triangle$max.bias^2 + triangle$sampling.se^2)
+    expect_true(triangle$max.bias^2 + triangle$sampling.se^2 < 
+                    rectangle$max.bias^2 + rectangle$sampling.se^2)
 })
 
 
