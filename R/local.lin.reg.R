@@ -198,6 +198,6 @@ llr = function(X,
              gamma=gamma,
              gamma.fun = data.frame(xx=xx[realized.idx] + threshold,
                                     gamma=gamma.xx[realized.idx]))
-  class(ret) = "optrdd"
+  class(ret) = "llr"
   return(ret)
 }
