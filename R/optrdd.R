@@ -7,8 +7,9 @@
 #' @param Y The outcomes. If null, only optimal weights are computed.
 #' @param W Treatment assignments, typically of the form 1(X >= c).
 #' @param max.second.derivative A bound on the second derivative of mu_w(x) = E[Y(w) | X = x].
-#' @param center Point "c" at which CATE is to be estimated. If center = NULL, we estimate
-#'               a weighted CATE, with weights chosen to minimize MSE (see Section 4.1 of paper).
+#' @param estimation.point Point "c" at which CATE is to be estimated. If estimation.point = NULL,
+#'                         we estimate a weighted CATE, with weights chosen to minimize MSE,
+#'                         as in Section 4.1 of Imbens and Wager (2017).
 #' @param sigma.sq The irreducible noise level. If null, estimated from the data.
 #' @param alpha Coverage probability of confidence intervals.
 #' @param lambda.mult Optional multplier that can be used to over- or under-penalize variance.
@@ -20,16 +21,20 @@
 #' @param spline.df Number of degrees of freedom (per running variable) used for spline computation.
 #' @param optimizer Which optimizer to use? Mosek is a commercial solver, but free
 #'                  academic licenses are available. Needs to be installed separately.
-#'                  Quadprog is the default R solver, and may be slower.
+#'                  Quadprog is the default R solver; it may be slow on large problems, but
+#'                  is very accurate on small problems. The option "auto" uses a heuristic to choose.
 #' @param verbose whether the optimizer should print progress information
 #'
 #' @return A trained optrdd object.
+#' 
+#' @examples
+#' 
 #' @export
 optrdd = function(X,
                   Y = NULL,
                   W,
                   max.second.derivative,
-                  center = NULL,
+                  estimation.point = NULL,
                   sigma.sq = NULL,
                   alpha = 0.95,
                   lambda.mult = 1,
@@ -50,8 +55,8 @@ optrdd = function(X,
     nvar = ncol(X)
     if (nvar >= 3) { stop("Not yet implemented for 3 or more running variables.") }
     
-    cate.at.pt = !is.null(center)
-    if (is.null(center)) { center = colMeans(X) }
+    cate.at.pt = !is.null(estimation.point)
+    if (is.null(estimation.point)) { estimation.point = colMeans(X) }
     univariate.monotone = (nvar == 1) &&
         ((max(X[W==0, 1]) <= min(X[W==1, 1])) || (max(X[W==1, 1]) <= min(X[W==0, 1])))
     
@@ -99,8 +104,8 @@ optrdd = function(X,
         xx.grid = breaks[-1] - bin.width/2
         num.bucket = length(xx.grid)
         
-        xx.grid = matrix(xx.grid - center, ncol = 1)
-        xx.centered = matrix(xx.grid - center, ncol = 1)
+        xx.grid = matrix(xx.grid, ncol = 1)
+        xx.centered = matrix(xx.grid - estimation.point, ncol = 1)
         zeroed.idx = max(which(xx.centered < 0)) + c(0, 1)
         
         idx.to.bucket = as.numeric(cut(X[,1], breaks = breaks))
@@ -115,11 +120,11 @@ optrdd = function(X,
         xx1 = breaks1[-1] - bin.width/2
         xx2 = breaks2[-1] - bin.width/2
         xx.grid = expand.grid(xx1, xx2)
+        xx.centered = t(t(xx.grid) - estimation.point)
         num.bucket = nrow(xx.grid)
-        
-        xx.centered = t(t(xx.grid) - center)
-        z1 = max(which(xx1 < 0)) + c(0, 1)
-        z2 = max(which(xx2 < 0)) + c(0, 1)
+
+        z1 = max(which(xx1 < estimation.point[1])) + c(0, 1)
+        z2 = max(which(xx2 < estimation.point[2])) + c(0, 1)
         zeroed.idx = as.matrix(expand.grid(z1 - 1, z2 - 1)) %*% c(1, length(xx1))
         
         idx.1 = as.numeric(cut(X[,1], breaks = breaks1))

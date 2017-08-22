@@ -2,11 +2,9 @@
 
 S3method(plot,llr)
 S3method(plot,optrdd)
-S3method(plot,optrdd.2d)
 S3method(print,llr)
 S3method(print,optrdd)
 S3method(summary,optrdd)
-S3method(summary,optrdd.2d)
 export(get.plusminus)
 export(llr)
 export(optrdd)

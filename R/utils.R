@@ -42,16 +42,28 @@ summary.optrdd = function(obj) {
 }
 
 #' @export
-plot.optrdd = function(obj) {
+plot.optrdd = function(obj, ...) {
     
     nvar = dim(obj$gamma.fun.0)[2] - 1
+    args = list(...)
     
     if (nvar == 1) {
         
         all.x = c(obj$gamma.fun.0[,1], obj$gamma.fun.1[,1])
-        xrng = range(all.x)
-        yrng = range(obj$gamma)
-        plot(NA, NA, xlab = "x", ylab = "gamma", xlim = xrng, ylim = yrng)
+        if (!"xlim" %in% names(args)) {
+            args$xlim = range(all.x)
+        }
+        if (!"ylim" %in% names(args)) {
+            args$ylim = range(obj$gamma)
+        }
+        if (!"xlab" %in% names(args)) {
+            args$xlab = "x"
+        }
+        if (!"ylab" %in% names(args)) {
+            args$ylab = "gamma"
+        }
+        args$x = NA; args$y = NA
+        do.call(plot, args)
         if (length (unique(all.x) > 40)) {
             points(obj$gamma.fun.0, col = 4, pch = 16, cex = 1.5)
             points(obj$gamma.fun.1, col = 2, pch = 16, cex = 1.5)
@@ -74,21 +86,24 @@ plot.optrdd = function(obj) {
         x1rng = range(obj$gamma.fun.0[, 1], obj$gamma.fun.1[, 1])
         x2rng = range(obj$gamma.fun.0[, 2], obj$gamma.fun.1[, 2])
         
-        plot(NA, NA, xlim = x1rng, ylim = x2rng, pch = 16, xlab = "x1", ylab = "x2")
+        if (!"xlim" %in% names(args)) {
+            args$xlim = x1rng
+        }
+        if (!"ylim" %in% names(args)) {
+            args$ylim = x2rng
+        }
+        if (!"xlab" %in% names(args)) {
+            args$xlab = "x1"
+        }
+        if (!"ylab" %in% names(args)) {
+            args$ylab = "x2"
+        }
+        args$x = NA; args$y = NA
+        do.call(plot, args)
         points(obj$gamma.fun.0[, 1:2], col = hc[cidx[1:nrow(obj$gamma.fun.0)]], pch = 16)
         points(obj$gamma.fun.1[, 1:2], col = hc[cidx[nrow(obj$gamma.fun.0) + 1:nrow(obj$gamma.fun.1)]], pch = 1, lwd = 2)
     
     } else {
         stop("Corrupted object.")
     }
-}
-
-#' @export
-plot.optrdd.2d = function(obj, xlab = "x1", ylab = "x2") {
-
-}
-
-#' @export
-summary.optrdd.2d = function(obj) {
-    summary.optrdd(obj)
 }

@@ -4,7 +4,7 @@
 \alias{optrdd}
 \title{Optimized regression discontinuity design}
 \usage{
-optrdd(X, Y = NULL, W, max.second.derivative, center = NULL,
+optrdd(X, Y = NULL, W, max.second.derivative, estimation.point = NULL,
   sigma.sq = NULL, alpha = 0.95, lambda.mult = 1, bin.width = NULL,
   use.homoskedatic.variance = FALSE, use.spline = TRUE, spline.df = NULL,
   optimizer = c("auto", "mosek", "quadprog"), verbose = TRUE)
@@ -18,8 +18,9 @@ optrdd(X, Y = NULL, W, max.second.derivative, center = NULL,
 
 \item{max.second.derivative}{A bound on the second derivative of mu_w(x) = E[Y(w) | X = x].}
 
-\item{center}{Point "c" at which CATE is to be estimated. If center = NULL, we estimate
-a weighted CATE, with weights chosen to minimize MSE (see Section 4.1 of paper).}
+\item{estimation.point}{Point "c" at which CATE is to be estimated. If estimation.point = NULL,
+we estimate a weighted CATE, with weights chosen to minimize MSE,
+as in Section 4.1 of Imbens and Wager (2017).}
 
 \item{sigma.sq}{The irreducible noise level. If null, estimated from the data.}
 
@@ -39,7 +40,8 @@ improving computational performance.}
 
 \item{optimizer}{Which optimizer to use? Mosek is a commercial solver, but free
 academic licenses are available. Needs to be installed separately.
-Quadprog is the default R solver, and may be slower.}
+Quadprog is the default R solver; it may be slow on large problems, but
+is very accurate on small problems. The option "auto" uses a heuristic to choose.}
 
 \item{verbose}{whether the optimizer should print progress information}
 }
@@ -49,4 +51,7 @@ A trained optrdd object.
 \description{
 Optimized estimation and inference of treamtment effects identified
 via regression discontinuities
+}
+\examples{
+
 }

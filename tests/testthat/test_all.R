@@ -1,4 +1,4 @@
-#set.seed(1)
+set.seed(1)
 
 max.second.derivative = 1
 K = 20
@@ -18,7 +18,7 @@ Y = 10 + X + rnorm(n) + W
 
 # Test methods initially, and confirm gamma moments
 rdd.free = optrdd(X=X, Y=Y, W=W, max.second.derivative = max.second.derivative, verbose = FALSE)
-rdd.cate = optrdd(X=X, Y=Y, W=W, center = threshold, max.second.derivative = max.second.derivative, verbose = FALSE)
+rdd.cate = optrdd(X=X, Y=Y, W=W, estimation.point = threshold, max.second.derivative = max.second.derivative, verbose = FALSE)
 
 test_that("optrdd gammas satisfy constraints", {
     tol = rdd.cate$gamma.fun.0[2, 1] - rdd.cate$gamma.fun.0[1, 1]
@@ -44,11 +44,11 @@ test_that("results match legacy implementation", {
 
 # Test optimization strategies
 rdd.free.raw = optrdd(X=X, Y=Y, W=W, max.second.derivative = max.second.derivative, bin.width = 0.05, use.spline = FALSE, verbose = FALSE)
-rdd.cate.raw = optrdd(X=X, Y=Y, W=W, center = threshold, max.second.derivative = max.second.derivative, bin.width = 0.01, use.spline = FALSE, verbose = FALSE)
+rdd.cate.raw = optrdd(X=X, Y=Y, W=W, estimation.point = threshold, max.second.derivative = max.second.derivative, bin.width = 0.01, use.spline = FALSE, verbose = FALSE)
 rdd.free.qp = optrdd(X=X, Y=Y, W=W, max.second.derivative = max.second.derivative, optimizer = "quadprog", verbose = FALSE)
-rdd.cate.qp = optrdd(X=X, Y=Y, W=W, center = threshold, max.second.derivative = max.second.derivative, optimizer = "quadprog", verbose = FALSE)
+rdd.cate.qp = optrdd(X=X, Y=Y, W=W, estimation.point = threshold, max.second.derivative = max.second.derivative, optimizer = "quadprog", verbose = FALSE)
 rdd.free.mk = optrdd(X=X, Y=Y, W=W, max.second.derivative = max.second.derivative, optimizer = "mosek", verbose = FALSE)
-rdd.cate.mk = optrdd(X=X, Y=Y, W=W, center = threshold, max.second.derivative = max.second.derivative, optimizer = "mosek", verbose = FALSE)
+rdd.cate.mk = optrdd(X=X, Y=Y, W=W, estimation.point = threshold, max.second.derivative = max.second.derivative, optimizer = "mosek", verbose = FALSE)
 
 test_that("optimization strategies are equivalent", {
     expect_equal(rdd.free$tau.hat, rdd.free.raw$tau.hat, tolerance = rdd.free$tau.plusminus)
@@ -67,9 +67,9 @@ test_that("optimization strategies are equivalent", {
 })
 
 # Test sigma square estimation for optrdd
-rdd.fixed = optrdd(X=X, Y=Y, W=W, center = threshold, max.second.derivative = max.second.derivative, verbose=FALSE,
+rdd.fixed = optrdd(X=X, Y=Y, W=W, estimation.point = threshold, max.second.derivative = max.second.derivative, verbose=FALSE,
                    sigma.sq=1, use.homoskedatic.variance=FALSE)
-rdd.homosk = optrdd(X=X, Y=Y, W=W, center = threshold, max.second.derivative = max.second.derivative, verbose=FALSE,
+rdd.homosk = optrdd(X=X, Y=Y, W=W, estimation.point = threshold, max.second.derivative = max.second.derivative, verbose=FALSE,
                     sigma.sq=1, use.homoskedatic.variance=TRUE)
 
 test_that("oprdd gets variance almost right", {
@@ -97,7 +97,7 @@ X.2d = cbind(X, runif(n, -1, 1))
 W = X.2d[, 1] < 0 | X.2d[, 2] < 0
 
 rdd.2d.free = optrdd(X=X.2d, Y=Y, W=W, max.second.derivative = max.second.derivative, verbose = FALSE, spline.df = 20, bin.width = 0.05)
-rdd.2d.cate = optrdd(X=X.2d, Y=Y, W=W, center = c(0, 0), max.second.derivative = max.second.derivative, verbose = FALSE, spline.df = 20, bin.width = 0.05)
+rdd.2d.cate = optrdd(X=X.2d, Y=Y, W=W, estimation.point = c(0, 0), max.second.derivative = max.second.derivative, verbose = FALSE, spline.df = 20, bin.width = 0.05)
 
 test_that("2d-optrdd gammas satisfy constraints", {
     tol = 0.05
