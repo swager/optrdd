@@ -37,20 +37,8 @@ optrdd.new = function(X,
                       use.homoskedatic.variance = FALSE,
                       use.spline = TRUE,
                       spline.df = NULL,
-                      optimizer = c("mosek", "quadprog"),
+                      optimizer = c("auto", "mosek", "quadprog"),
                       verbose = TRUE) {
-    
-    optimizer = match.arg(optimizer)
-    
-    if (optimizer == "mosek") {
-        if (!suppressWarnings(require("Rmosek", quietly = TRUE))) {
-            warning(paste("The mosek optimizer is not installed; using quadprog instead.",
-                          "This may be very slow, especially if high numerical precision is required",
-                          "or with more than one running variable.",
-                          "Setting a small value of spline.df may speed up the solver"))
-            optimizer = "quadprog"
-        }
-    }  
     
     n = length(W)
     if (class(W) == "logical") W = as.numeric(W)
@@ -63,6 +51,30 @@ optrdd.new = function(X,
     
     cate.at.pt = !is.null(center)
     if (is.null(center)) { center = colMeans(X) }
+    univariate.monotone = (nvar == 1) &&
+        ((max(X[W==0, 1]) <= min(X[W==1, 1])) || (max(X[W==1, 1]) <= min(X[W==0, 1])))
+    
+    optimizer = match.arg(optimizer)
+    if (optimizer == "auto") {
+        if (nvar == 1 && use.spline && (univariate.monotone || !cate.at.pt)) {
+            optimizer = "quadprog"
+        } else {
+            optimizer = "mosek"
+        }
+    }
+        
+    
+    if (optimizer == "mosek") {
+        if (!suppressWarnings(require("Rmosek", quietly = TRUE))) {
+            optimizer = "quadprog"
+            if (nvar >= 2) {
+                warning(paste("The mosek optimizer is not installed; using quadprog instead.",
+                              "This may be very slow with more than one running variable."))
+            } else {
+                warning(paste("The mosek optimizer is not installed; using quadprog instead."))
+            }
+        }
+    }  
     
     # Naive initialization for sigma.sq if needed
     if (is.null(sigma.sq)) {
@@ -212,20 +224,25 @@ optrdd.new = function(X,
         num.df = num.bucket
     }
     
+    # If we are in one dimension and have a threshold RDD, it is
+    # enough to estimate a single nuisance function f0.
+    change.slope = cate.at.pt
+    two.fun = cate.at.pt & !univariate.monotone
+    
     # We now prepare inputs to a numerical optimizer. We seek to
     # solve a discretized version of equation (18) from Imbens and Wager (2017).
     # The parameters to the problem are ordered as (G(0), G(1), lambda, f0, f1).
-    num.lambda = 3 + nvar *(1 + cate.at.pt)
-    num.params = num.realized.0 + num.realized.1 + num.lambda + (1 + cate.at.pt) * num.df
+    num.lambda = 3 + nvar * (1 + change.slope)
+    num.params = num.realized.0 + num.realized.1 + num.lambda + (1 + two.fun) * num.df
     
     # The quadratic component of the objective is 1/2 sum_j Dmat.diagonal_j * params_j^2
     Dmat.diagonal = c((X.counts[realized.idx.0] - W.counts[realized.idx.0]) / 2 / sigma.sq,
                       (W.counts[realized.idx.1]) / 2 / sigma.sq,
                       lambda.mult / max.second.derivative^2 / 2,
-                      rep(0, num.lambda - 1 + (1 + cate.at.pt) * num.df))
+                      rep(0, num.lambda - 1 + (1 + two.fun) * num.df))
     # The linear component of the objective is sum(dvec * params)
     dvec = c(rep(0, num.realized.0 + num.realized.1 + 1), 1, -1,
-             rep(0, num.lambda - 3 + (1 + cate.at.pt) * num.df))
+             rep(0, num.lambda - 3 + (1 + two.fun) * num.df))
     # We now impose constrains on Amat %*% params.
     # The first meq constrains are equality constraints (Amat %*% params = 0);
     # the remaining ones are inequalities (Amat %*% params >= 0).
@@ -234,15 +251,15 @@ optrdd.new = function(X,
         cbind(Matrix::Diagonal(num.realized.0, -1),
               Matrix::Matrix(0, num.realized.0, num.realized.1),
               0, 0, 1, xx.centered[realized.idx.0,],
-              if(cate.at.pt) { -xx.centered[realized.idx.0,] } else { numeric() },
+              if(change.slope) { -xx.centered[realized.idx.0,] } else { numeric() },
               selector.0,
-              if(cate.at.pt) { Matrix::Matrix(0, num.realized.0, num.df) } else { numeric() }),
+              if(two.fun) { Matrix::Matrix(0, num.realized.0, num.df) } else { numeric() }),
         # Defines G(1) in terms of the other problem parameters (equality constraint)
         cbind(Matrix::Matrix(0, num.realized.1, num.realized.0),
               Matrix::Diagonal(num.realized.1, -1),
               0, 1, 0, xx.centered[realized.idx.1,],
-              if(cate.at.pt) { xx.centered[realized.idx.1,] } else { numeric() },
-              if(cate.at.pt) {
+              if(change.slope) { xx.centered[realized.idx.1,] } else { numeric() },
+              if(two.fun) {
                   cbind(Matrix::Matrix(0, num.realized.1, num.df), selector.1)
               } else {
                   selector.1
@@ -250,8 +267,8 @@ optrdd.new = function(X,
         # Ensure that f_w(c), f'_w(c) = 0
         cbind(Matrix::Matrix(0, length(zeroed.idx), num.realized.0 + num.realized.1 + num.lambda),
               centering.matrix,
-              Matrix::Matrix(0, length(zeroed.idx), as.numeric(cate.at.pt) * num.df)),
-        if(cate.at.pt) {
+              Matrix::Matrix(0, length(zeroed.idx), as.numeric(two.fun) * num.df)),
+        if(two.fun) {
             cbind(Matrix::Matrix(0, length(zeroed.idx), num.realized.0 + num.realized.1 + num.lambda + num.df),
                   centering.matrix)
         } else { numeric() },
@@ -260,16 +277,16 @@ optrdd.new = function(X,
               bin.width^2,
               matrix(0, 2 * nrow(D2), num.lambda - 1),
               rbind(D2, -D2),
-              if (cate.at.pt) { Matrix::Matrix(0, 2 * nrow(D2), num.df) } else { numeric() }),
+              if (two.fun) { Matrix::Matrix(0, 2 * nrow(D2), num.df) } else { numeric() }),
         # Bound the second derivative of f_1 by lambda_1
-        if (cate.at.pt) {
+        if (two.fun) {
             cbind(Matrix::Matrix(0, 2 * nrow(D2), num.realized.0 + num.realized.1),
                   bin.width^2,
                   matrix(0, 2 * nrow(D2), num.lambda - 1 + num.df),
                   rbind(D2, -D2))
         })
     
-    meq = num.realized.0 + num.realized.1 + length(zeroed.idx) * (1 + cate.at.pt)
+    meq = num.realized.0 + num.realized.1 + length(zeroed.idx) * (1 + two.fun)
     bvec = rep(0, nrow(Amat))
     
     gamma.0 = rep(0, num.bucket)
@@ -313,6 +330,8 @@ optrdd.new = function(X,
         # We seek to minimize c * {params}
         mosek.problem$sense <- "min"
         mosek.problem$c <- c(dvec, 1, 0)
+        
+        #mosek.problem$dparam= list(BASIS_TOL_S=1.0e-9, BASIS_TOL_X=1.0e-9)
         
         if (verbose) {
             mosek.out = Rmosek::mosek(mosek.problem)

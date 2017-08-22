@@ -7,7 +7,7 @@
 optrdd.new(X, Y = NULL, W, max.second.derivative, center = NULL,
   sigma.sq = NULL, alpha = 0.95, lambda.mult = 1, bin.width = NULL,
   use.homoskedatic.variance = FALSE, use.spline = TRUE, spline.df = NULL,
-  optimizer = c("mosek", "quadprog"), verbose = TRUE)
+  optimizer = c("auto", "mosek", "quadprog"), verbose = TRUE)
 }
 \arguments{
 \item{X}{The running variables.}

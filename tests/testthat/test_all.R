@@ -32,20 +32,26 @@ test_that("optrdd gammas satisfy constraints", {
 
 # Test optimization strategies
 rdd.free.raw = optrdd.new(X=X, Y=Y, W=W, max.second.derivative = max.second.derivative, bin.width = 0.05, use.spline = FALSE, verbose = FALSE)
-rdd.cate.raw = optrdd.new(X=X, Y=Y, W=W, center = threshold, max.second.derivative = max.second.derivative, bin.width = 0.05, use.spline = FALSE, verbose = FALSE)
+rdd.cate.raw = optrdd.new(X=X, Y=Y, W=W, center = threshold, max.second.derivative = max.second.derivative, bin.width = 0.01, use.spline = FALSE, verbose = FALSE)
 rdd.free.qp = optrdd.new(X=X, Y=Y, W=W, max.second.derivative = max.second.derivative, optimizer = "quadprog")
 rdd.cate.qp = optrdd.new(X=X, Y=Y, W=W, center = threshold, max.second.derivative = max.second.derivative, optimizer = "quadprog")
+rdd.free.mk = optrdd.new(X=X, Y=Y, W=W, max.second.derivative = max.second.derivative, optimizer = "mosek", verbose = FALSE)
+rdd.cate.mk = optrdd.new(X=X, Y=Y, W=W, center = threshold, max.second.derivative = max.second.derivative, optimizer = "mosek", verbose = FALSE)
 
 test_that("optimization strategies are equivalent", {
     expect_equal(rdd.free$tau.hat, rdd.free.raw$tau.hat, tolerance = rdd.free$tau.plusminus)
     expect_equal(rdd.free$tau.plusminus, rdd.free.raw$tau.plusminus, tolerance = 0.05)
     expect_equal(rdd.free$tau.hat, rdd.free.qp$tau.hat, tolerance = 0.01)
     expect_equal(rdd.free$tau.plusminus, rdd.free.qp$tau.plusminus, tolerance = 0.01)
+    expect_equal(rdd.free$tau.hat, rdd.free.mk$tau.hat, tolerance = 0.01)
+    expect_equal(rdd.free$tau.plusminus, rdd.free.mk$tau.plusminus, tolerance = 0.01)
     
     expect_equal(rdd.cate$tau.hat, rdd.cate.raw$tau.hat, tolerance = rdd.cate$tau.plusminus)
     expect_equal(rdd.cate$tau.plusminus, rdd.cate.raw$tau.plusminus, tolerance = 0.05)
     expect_equal(rdd.cate$tau.hat, rdd.cate.qp$tau.hat, tolerance = 0.01)
-    expect_equal(rdd.cate$tau.plusminus, rdd.cate.qp$tau.plusminus, tolerance = 0.01)
+    expect_equal(rdd.cate$tau.plusminus, rdd.cate.qp$tau.plusminus, tolerance = 0.05)
+    expect_equal(rdd.cate$tau.hat, rdd.cate.mk$tau.hat, tolerance = 0.01)
+    expect_equal(rdd.cate$tau.plusminus, rdd.cate.mk$tau.plusminus, tolerance = 0.05)
 })
 
 # Test sigma square estimation for optrdd
@@ -56,7 +62,7 @@ rdd.homosk = optrdd.new(X=X, Y=Y, W=W, center = threshold, max.second.derivative
 
 test_that("oprdd gets variance almost right", {
     expect_equal(rdd.cate$tau.hat, rdd.fixed$tau.hat, tolerance = 0.01)
-    expect_equal(rdd.cate$tau.plusminus, rdd.fixed$tau.plusminus, tolerance = 0.01)
+    expect_equal(rdd.cate$tau.plusminus, rdd.fixed$tau.plusminus, tolerance = 0.05)
     expect_equal(rdd.cate$tau.hat, rdd.homosk$tau.hat, tolerance = 0.01)
     expect_equal(rdd.cate$tau.plusminus, rdd.homosk$tau.plusminus, tolerance = 0.05)
 })
