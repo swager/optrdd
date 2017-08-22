@@ -41,8 +41,11 @@ summary.optrdd = function(obj) {
     unlist(obj)[1:length(obj)]
 }
 
+#' @export
 plot.optrdd = function(obj) {
+    
     nvar = dim(obj$gamma.fun.0)[2] - 1
+    
     if (nvar == 1) {
         
         all.x = c(obj$gamma.fun.0[,1], obj$gamma.fun.1[,1])
