@@ -25,26 +25,27 @@
 #'
 #' @return A trained optrdd object.
 #' @export
-optrdd.new = function(X,
-                      Y = NULL,
-                      W,
-                      max.second.derivative,
-                      center = NULL,
-                      sigma.sq = NULL,
-                      alpha = 0.95,
-                      lambda.mult = 1,
-                      bin.width = NULL,
-                      use.homoskedatic.variance = FALSE,
-                      use.spline = TRUE,
-                      spline.df = NULL,
-                      optimizer = c("auto", "mosek", "quadprog"),
-                      verbose = TRUE) {
+optrdd = function(X,
+                  Y = NULL,
+                  W,
+                  max.second.derivative,
+                  center = NULL,
+                  sigma.sq = NULL,
+                  alpha = 0.95,
+                  lambda.mult = 1,
+                  bin.width = NULL,
+                  use.homoskedatic.variance = FALSE,
+                  use.spline = TRUE,
+                  spline.df = NULL,
+                  optimizer = c("auto", "mosek", "quadprog"),
+                  verbose = TRUE) {
     
     n = length(W)
     if (class(W) == "logical") W = as.numeric(W)
     if (!is.null(Y) & (length(Y) != n)) { stop("Y and W must have same length.") }
     if (is.null(dim(X))) { X = matrix(X, ncol = 1) }
     if (nrow(X) != n) { stop("The number of rows of X and the length of W must match") }
+    if (length(max.second.derivative) != 1) { stop("max.second.derivative must be of length 1.") }
     
     nvar = ncol(X)
     if (nvar >= 3) { stop("Not yet implemented for 3 or more running variables.") }
@@ -294,9 +295,13 @@ optrdd.new = function(X,
     
     if (optimizer == "quadprog") {
         
+        if (verbose) {
+            print(paste0("Running quadrprog with problem of size: ",
+                         dim(Amat)[1], " x ", dim(Amat)[2], "..."))
+        }
         # For quadprog, we need Dmat to be positive definite, which is why we add a small number to the diagonal.
         # The conic implementation via mosek does not have this issue.
-        soln = quadprog::solve.QP(Matrix::Diagonal(num.params, Dmat.diagonal + 0.000000000001),
+        soln = quadprog::solve.QP(Matrix::Diagonal(num.params, Dmat.diagonal + 0.000000001),
                                   -dvec,
                                   Matrix::t(Amat),
                                   bvec,

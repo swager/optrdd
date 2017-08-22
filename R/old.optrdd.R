@@ -19,18 +19,18 @@
 #'
 #' @return A trained optrdd object.
 #' @export
-optrdd = function(X,
-                  max.second.derivative,
-                  Y = NULL,
-                  num.samples = rep(1, length(X)),
-                  threshold = 0,
-                  sigma.sq = NULL,
-                  change.derivative = TRUE,
-                  alpha = 0.95,
-                  lambda.mult = 1,
-                  max.window = max(abs(X - threshold)),
-                  num.bucket = 200,
-                  use.homoskedatic.variance = FALSE) {
+optrdd.primal = function(X,
+                         max.second.derivative,
+                         Y = NULL,
+                         num.samples = rep(1, length(X)),
+                         threshold = 0,
+                         sigma.sq = NULL,
+                         change.derivative = TRUE,
+                         alpha = 0.95,
+                         lambda.mult = 1,
+                         max.window = max(abs(X - threshold)),
+                         num.bucket = 200,
+                         use.homoskedatic.variance = FALSE) {
   
   # We compute our estimator based on a histogram summary of the data,
   # shifted such that the threshold is at 0. The breaks vector defines
@@ -169,7 +169,7 @@ optrdd = function(X,
              gamma=gamma,
              gamma.fun = data.frame(xx=xx[realized.idx] + threshold,
                                     gamma=gamma.xx[realized.idx]))
-  class(ret) = "optrdd"
+  class(ret) = "llr"
   return(ret)
 }
 
