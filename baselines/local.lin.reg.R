@@ -22,7 +22,6 @@
 #'
 #' @return A trained optrdd object. Note that locally linear regression also provides
 #'         a linear estimator for tau, just like optrdd. The gammas simply aren't optimal.
-#' @export
 llr = function(X,
                max.second.derivative,
                bandwidth = NULL,
@@ -200,4 +199,13 @@ llr = function(X,
                                     gamma=gamma.xx[realized.idx]))
   class(ret) = "llr"
   return(ret)
+}
+
+print.llr = function(obj) {
+    print.optrdd(obj)
+}
+
+plot.llr = function(obj) {
+    plot(obj$gamma.fun)
+    abline(h = 0, lty = 3)
 }

@@ -26,19 +26,8 @@ print.optrdd = function(obj) {
 }
 
 #' @export
-print.llr = function(obj) {
-    print.optrdd(obj)
-}
-
-#' @export
-plot.llr = function(obj) {
-    plot(obj$gamma.fun)
-    abline(h = 0, lty = 3)
-}
-
-#' @export
 summary.optrdd = function(obj) {
-    unlist(obj)[1:length(obj)]
+    unlist(obj)[1:5]
 }
 
 #' @export

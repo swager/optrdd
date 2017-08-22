@@ -1,5 +1,11 @@
 set.seed(1)
 
+# Even though they aren't part of the package,
+# we still test baseline implementations used in
+# experiments.
+source("../../baselines/local.lin.reg.R")
+source("../../baselines/old.optrdd.R")
+
 max.second.derivative = 1
 K = 20
 vv = 1.27 * 1:20
