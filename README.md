@@ -13,7 +13,7 @@ Mosek is a commercial interior point solver that needs to be installed separatel
 while quadprog is a standard `R` optimization library.
 Both optimizers appear to work well with a univariate running variable;
 however, with multi-dimensional running variables, we strongly recommend
-installing mosek.
+[installing mosek](INSTALLING_MOSEK.md).
 
 Example usage:
 
