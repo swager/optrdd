@@ -6,8 +6,9 @@
 \usage{
 optrdd(X, Y = NULL, W, max.second.derivative, estimation.point = NULL,
   sigma.sq = NULL, alpha = 0.95, lambda.mult = 1, bin.width = NULL,
-  use.homoskedatic.variance = FALSE, use.spline = TRUE, spline.df = NULL,
-  optimizer = c("auto", "mosek", "quadprog"), verbose = TRUE)
+  num.bucket = NULL, use.homoskedatic.variance = FALSE, use.spline = TRUE,
+  spline.df = NULL, optimizer = c("auto", "mosek", "quadprog"),
+  verbose = TRUE)
 }
 \arguments{
 \item{X}{The running variables.}
@@ -29,6 +30,8 @@ as in Section 4.1 of Imbens and Wager (2017).}
 \item{lambda.mult}{Optional multplier that can be used to over- or under-penalize variance.}
 
 \item{bin.width}{Bin width for discrete approximation.}
+
+\item{num.bucket}{Number of bins for discrete approximation. Can only be used if bin.width = NULL.}
 
 \item{use.homoskedatic.variance}{Whether confidence intervals should be built assuming homoskedasticity.}
 
