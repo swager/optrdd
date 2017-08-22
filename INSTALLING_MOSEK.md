@@ -6,10 +6,10 @@ MOSEK is called from R via the RMosek interface.
 MOSEK can be installed as follows
 
 1. [Download](https://www.mosek.com/resources/downloads) MOSEK for the relevant platform.
-2. Place the downloaded files in the home directory (e.g., /home/<userid>/mosek/)
+2. Place the downloaded files in the home directory (e.g., /home/`<userid>`/mosek/)
 3. Request a licence. If you're an [academic](https://www.mosek.com/resources/academic-license),
 you can get one for free.
-4. Place the license in the mosek directory (e.g., /home/<userid>/mosek/mosek.lic)
+4. Place the license in the mosek directory (e.g., /home/`<userid>`/mosek/mosek.lic)
 5. Install the RMosek interface. The following (Mac OSX specific) command worked for me:
 
 ```R
