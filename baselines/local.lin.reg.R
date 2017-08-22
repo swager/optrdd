@@ -31,8 +31,8 @@ llr = function(X,
                sigma.sq = NULL,
                change.derivative = TRUE,
                alpha = 0.95,
-               max.window = max(abs(X - threshold)),
-               num.bucket = 200,
+               max.window = NULL,
+               num.bucket = 600,
                kernel = c("rectangular", "triangular"),
                minimization.target = c("mse", "ci.length"),
                use.homoskedatic.variance = FALSE) {
@@ -43,12 +43,20 @@ llr = function(X,
   # We compute our estimator based on a histogram summary of the data,
   # shifted such that the threshold is at 0. The breaks vector defines
   # the boundaries between buckets.
-  xx = seq(-max.window, max.window, length.out = num.bucket)
+  if (is.null(max.window)) {
+      xx = seq(min(X - threshold), max(X - threshold), length.out = num.bucket)
+  } else {
+      xx = seq(-max.window, max.window, length.out = num.bucket)
+  }
   bin.width = xx[2] - xx[1]
   breaks = c(xx - bin.width/2, max(xx) + bin.width/2)
   
   # Construct a (weighted) histogram representing the X-values.
-  inrange = which(abs(X - threshold) / max.window <= 1)
+  if (!is.null(max.window)) {
+      inrange = which(abs(X - threshold) / max.window <= 1)
+  } else {
+      inrange = 1:length(X)
+  }
   bucket = cut(X[inrange] - threshold, breaks = breaks)
   bucket.map = Matrix::sparse.model.matrix(~bucket + 0, transpose = TRUE)
   X.counts = as.numeric(bucket.map %*% num.samples[inrange])
@@ -76,9 +84,13 @@ llr = function(X,
   M2 = M %*% M
   
   if (!is.null(bandwidth)) {
-    bw.vec = bandwidth
+      bw.vec = bandwidth
   } else {
-    bw.vec = c(1:40) * max.window / 40
+      if (!is.null(max.window)) {
+          bw.vec = c(1:40) * max.window / 40
+      } else {
+          bw.vec = c(1:40) * min(max(xx), max(-xx)) / 40
+      }
   }
   
   soln.vec = lapply(bw.vec, function(bw) {
@@ -202,10 +214,14 @@ llr = function(X,
 }
 
 print.llr = function(obj) {
-    print.optrdd(obj)
+    optrdd:::print.optrdd(obj)
 }
 
 plot.llr = function(obj) {
     plot(obj$gamma.fun)
     abline(h = 0, lty = 3)
+}
+
+summary.llr = function(obj) {
+    unlist(obj)[1:5]
 }

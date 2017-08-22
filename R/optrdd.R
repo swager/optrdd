@@ -14,6 +14,7 @@
 #' @param alpha Coverage probability of confidence intervals.
 #' @param lambda.mult Optional multplier that can be used to over- or under-penalize variance.
 #' @param bin.width Bin width for discrete approximation.
+#' @param num.bucket Number of bins for discrete approximation. Can only be used if bin.width = NULL.
 #' @param use.homoskedatic.variance Whether confidence intervals should be built assuming homoskedasticity.
 #' @param use.spline Whether non-parametric components should be modeled as quadratic splines
 #'                   in order to reduce the number of optimization parameters, and potentially
@@ -69,6 +70,7 @@ optrdd = function(X,
                   alpha = 0.95,
                   lambda.mult = 1,
                   bin.width = NULL,
+                  num.bucket = NULL,
                   use.homoskedatic.variance = FALSE,
                   use.spline = TRUE,
                   spline.df = NULL,
@@ -81,6 +83,7 @@ optrdd = function(X,
     if (is.null(dim(X))) { X = matrix(X, ncol = 1) }
     if (nrow(X) != n) { stop("The number of rows of X and the length of W must match") }
     if (length(max.second.derivative) != 1) { stop("max.second.derivative must be of length 1.") }
+    if (!is.null(bin.width) & !is.null(num.bucket)) { stop("Only one of bin.width or num.bucket may be used.") }
     
     nvar = ncol(X)
     if (nvar >= 3) { stop("Not yet implemented for 3 or more running variables.") }
@@ -92,7 +95,10 @@ optrdd = function(X,
     
     optimizer = match.arg(optimizer)
     if (optimizer == "auto") {
-        if (nvar == 1 && use.spline && (univariate.monotone || !cate.at.pt)) {
+        if (nvar == 1 &&
+            use.spline &&
+            (univariate.monotone || !cate.at.pt) &&
+            length(unique(c(X))) <= 100) {
             optimizer = "quadprog"
         } else {
             optimizer = "mosek"
@@ -128,7 +134,8 @@ optrdd = function(X,
     if (nvar == 1) {
         
         if (is.null(bin.width)) {
-            bin.width = (max(X[,1]) - min(X[,1])) / 2000
+            if (is.null(num.bucket)) { num.bucket = 2000 }
+            bin.width = (max(X[,1]) - min(X[,1])) / num.bucket
         }
         breaks = seq(min(X[,1]) - bin.width/2, max(X[,1]) + bin.width, by = bin.width)
         xx.grid = breaks[-1] - bin.width/2
@@ -143,7 +150,8 @@ optrdd = function(X,
     } else if (nvar == 2) {
         
         if (is.null(bin.width)) {
-            bin.width = sqrt((max(X[,1]) - min(X[,1])) * (max(X[,2]) - min(X[,2])) / 10000)
+            if (is.null(num.bucket)) { num.bucket = 10000 }
+            bin.width = sqrt((max(X[,1]) - min(X[,1])) * (max(X[,2]) - min(X[,2])) / num.bucket)
         }
         breaks1 = seq(min(X[,1]) - bin.width/2, max(X[,1]) + bin.width, by = bin.width)
         breaks2 = seq(min(X[,2]) - bin.width/2, max(X[,2]) + bin.width, by = bin.width)
