@@ -107,7 +107,7 @@ optrdd = function(X,
         
     
     if (optimizer == "mosek") {
-        if (!requireNamespace("RColorBrewer", quietly = TRUE)) {
+        if (!requireNamespace("Rmosek", quietly = TRUE)) {
             optimizer = "quadprog"
             if (nvar >= 2) {
                 warning(paste("The mosek optimizer is not installed; using quadprog instead.",
