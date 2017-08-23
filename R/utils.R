@@ -9,7 +9,7 @@
 get.plusminus = function(max.bias, sampling.se, alpha = 0.95) {
     rel.bias = max.bias/sampling.se
     zz = stats::uniroot(function(z) stats::pnorm(rel.bias - z) +
-                            stats::pnorm(-rel.bias - z) - 0.05,
+                            stats::pnorm(-rel.bias - z) + alpha - 1,
                         c(0, rel.bias - stats::qnorm((1 - alpha)/3)))$root
     zz * sampling.se
 }

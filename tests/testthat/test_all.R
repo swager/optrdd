@@ -38,7 +38,7 @@ test_that("cate constraint hurts", {
 # Check implementation against legacy implementation
 test_that("results match legacy implementation", {
     skip_on_cran()
-    source("../../baselines/local.lin.reg.R")
+    source("../../baselines/old.optrdd.R")
     rdd.old = optrdd.primal(X=X, Y=Y, threshold = 0, max.second.derivative = max.second.derivative)
     expect_equal(rdd.cate$tau.hat, rdd.old$tau.hat, tolerance = rdd.cate$tau.plusminus)
     expect_equal(rdd.cate$tau.plusminus, rdd.old$tau.plusminus, tolerance = 0.01)
@@ -84,14 +84,16 @@ test_that("oprdd gets variance almost right", {
 
 # Test bias-adjusted confidence interval function
 
-max.bias = 1
-se = 2
-alpha = 0.95
-pm = get.plusminus(max.bias, se, alpha)
-err = pnorm(-(pm + max.bias)/se) + pnorm(-(pm - max.bias)/se)
-
 test_that("test plusminus function", {
+    max.bias = 1
+    se = 2
+    alpha = 0.95
+    pm = get.plusminus(max.bias, se, alpha)
+    err = pnorm(-(pm + max.bias)/se) + pnorm(-(pm - max.bias)/se)
     expect_equal(alpha + err, 1, tolerance = 10^(-5))
+    
+    pm2 = get.plusminus(0, 1, 0.9)
+    expect_equal(pm2, qnorm(0.95), tolerance = 10^(-5))
 })
 
 # Test 2d optrdd
@@ -127,7 +129,7 @@ test_that("optimization strategies are equivalent", {
 test_that("baseline local linear regression implementation works", {
     
     skip_on_cran()
-    source("../../baselines/old.optrdd.R")
+    source("../../baselines/local.lin.reg.R")
     rectangle = llr(X, Y = Y, max.second.derivative, kernel = "rectangular", 
                     minimization.target = "mse", max.window = 1)
     triangle = llr(X, Y = Y, max.second.derivative, kernel = "triangular", 
