@@ -4,7 +4,7 @@ Version: 0.9
 Authors@R: c(
   person("Guido", "Imbens", email = "imbens@stanford.edu", role = c("aut")),
   person("Stefan", "Wager", email = "swager@stanford.edu", role = c("aut", "cre")))
-Description: Optimized inference in regression discontinuity designs, as proposed by Imbens and Wager (2017).
+Description: Optimized inference in regression discontinuity designs, as proposed by Imbens and Wager (2017) <arxiv:1705.01677>.
 Depends:
     R (>= 3.0.1)
 Imports: quadprog,
