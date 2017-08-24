@@ -76,7 +76,7 @@ optrdd = function(X,
                   spline.df = NULL,
                   optimizer = c("auto", "mosek", "quadprog"),
                   verbose = TRUE) {
-    
+
     n = length(W)
     if (class(W) == "logical") W = as.numeric(W)
     if (!is.null(Y) & (length(Y) != n)) { stop("Y and W must have same length.") }
@@ -110,6 +110,9 @@ optrdd = function(X,
         if (!requireNamespace("Rmosek", quietly = TRUE)) {
             optimizer = "quadprog"
             if (nvar >= 2) {
+                op = options("warn")
+                on.exit(options(op))
+                options(warn=1)
                 warning(paste("The mosek optimizer is not installed; using quadprog instead.",
                               "This may be very slow with more than one running variable."))
             } else {
@@ -150,7 +153,15 @@ optrdd = function(X,
     } else if (nvar == 2) {
         
         if (is.null(bin.width)) {
-            if (is.null(num.bucket)) { num.bucket = 10000 }
+            if (is.null(num.bucket)) { 
+                if (optimizer == "quadprog") {
+                    num.bucket = 900
+                    warning(paste("Using coarse discrete approximation of size 30x30",
+                                  "to make quadprog run faster (i.e., num.bucket = 900.)"))
+                } else {
+                    num.bucket = 10000
+                }
+            }
             bin.width = sqrt((max(X[,1]) - min(X[,1])) * (max(X[,2]) - min(X[,2])) / num.bucket)
         }
         breaks1 = seq(min(X[,1]) - bin.width/2, max(X[,1]) + bin.width, by = bin.width)

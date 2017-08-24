@@ -46,7 +46,7 @@ test_that("results match legacy implementation", {
 
 # Test optimization strategies
 rdd.free.raw = optrdd(X=X, Y=Y, W=W, max.second.derivative = max.second.derivative, bin.width = 0.05, use.spline = FALSE, verbose = FALSE)
-rdd.cate.raw = optrdd(X=X, Y=Y, W=W, estimation.point = threshold, max.second.derivative = max.second.derivative, bin.width = 0.01, use.spline = FALSE, verbose = FALSE)
+rdd.cate.raw = optrdd(X=X, Y=Y, W=W, estimation.point = threshold, max.second.derivative = max.second.derivative, bin.width = 0.05, use.spline = FALSE, verbose = FALSE)
 rdd.free.qp = optrdd(X=X, Y=Y, W=W, max.second.derivative = max.second.derivative, optimizer = "quadprog", verbose = FALSE)
 rdd.cate.qp = optrdd(X=X, Y=Y, W=W, estimation.point = threshold, max.second.derivative = max.second.derivative, optimizer = "quadprog", verbose = FALSE)
 rdd.free.mk = optrdd(X=X, Y=Y, W=W, max.second.derivative = max.second.derivative, optimizer = "mosek", verbose = FALSE)
@@ -100,8 +100,19 @@ test_that("test plusminus function", {
 X.2d = cbind(X, runif(n, -1, 1))
 W = X.2d[, 1] < 0 | X.2d[, 2] < 0
 
-rdd.2d.free = optrdd(X=X.2d, Y=Y, W=W, max.second.derivative = max.second.derivative, verbose = FALSE, spline.df = 20, bin.width = 0.05)
-rdd.2d.cate = optrdd(X=X.2d, Y=Y, W=W, estimation.point = c(0, 0), max.second.derivative = max.second.derivative, verbose = FALSE, spline.df = 20, bin.width = 0.05)
+MOSEK = requireNamespace("Rmosek", quietly = TRUE)
+if (MOSEK) {
+    rdd.2d.free = optrdd(X=X.2d, Y=Y, W=W, max.second.derivative = max.second.derivative,
+                         verbose = FALSE, spline.df = 20, bin.width = 0.05)
+    rdd.2d.cate = optrdd(X=X.2d, Y=Y, W=W, estimation.point = c(0, 0), max.second.derivative = max.second.derivative,
+                         verbose = FALSE, spline.df = 20, bin.width = 0.05)
+} else { # if MOSEK isn't installed, make problem easier
+    rdd.2d.free = optrdd(X=X.2d, Y=Y, W=W, max.second.derivative = max.second.derivative,
+                         verbose = FALSE, spline.df = 6, bin.width = 0.2)
+    rdd.2d.cate = optrdd(X=X.2d, Y=Y, W=W, estimation.point = c(0, 0), max.second.derivative = max.second.derivative,
+                         verbose = FALSE, spline.df = 6, bin.width = 0.2)
+}
+
 
 test_that("2d-optrdd gammas satisfy constraints", {
     tol = 0.05
@@ -117,10 +128,10 @@ test_that("2d-optrdd gammas satisfy constraints", {
     expect_equal(sum(rdd.2d.cate$gamma * W * X.2d[, 2]), 0, tolerance = tol)
 })
 
-
-rdd.2d.free.raw = optrdd(X=X.2d, Y=Y, W=W, max.second.derivative = max.second.derivative, use.spline = FALSE, bin.width = 0.05, verbose = FALSE)
-
 test_that("optimization strategies are equivalent", {
+    skip_if_not(MOSEK) # too slow without MOSEK
+    rdd.2d.free.raw = optrdd(X=X.2d, Y=Y, W=W, max.second.derivative = max.second.derivative,
+                             use.spline = FALSE, bin.width = 0.05, verbose = FALSE)
     expect_equal(rdd.2d.free$tau.hat, rdd.2d.free.raw$tau.hat, tolerance = rdd.2d.free$tau.plusminus)
     expect_equal(rdd.2d.free$tau.plusminus, rdd.2d.free.raw$tau.plusminus, tolerance = 0.01)
 })
