@@ -22,6 +22,7 @@
 #' @param spline.df Number of degrees of freedom (per running variable) used for spline computation.
 #' @param optimizer Which optimizer to use? Mosek is a commercial solver, but free
 #'                  academic licenses are available. Needs to be installed separately.
+#'                  SCS is ...
 #'                  Quadprog is the default R solver; it may be slow on large problems, but
 #'                  is very accurate on small problems. The option "auto" uses a heuristic to choose.
 #' @param verbose whether the optimizer should print progress information
@@ -75,7 +76,7 @@ optrdd = function(X,
                   use.homoskedatic.variance = FALSE,
                   use.spline = TRUE,
                   spline.df = NULL,
-                  optimizer = c("auto", "mosek", "quadprog"),
+                  optimizer = c("auto", "mosek", "SCS", "quadprog"),
                   verbose = TRUE) {
 
     n = length(W)
@@ -246,7 +247,7 @@ optrdd = function(X,
     # components in a quadratic spline basis.
     if (use.spline) {
         if (is.null(spline.df)) {
-            if (optimizer == "mosek") {
+            if (optimizer == "mosek" || optimizer == "SCS") {
                 spline.df = c(100, 45 - 15 * cate.at.pt)[nvar]
             } else {
                 spline.df = c(40, 10)[nvar]
@@ -366,6 +367,26 @@ optrdd = function(X,
         gamma.1[realized.idx.1] = - soln$solution[num.realized.0 + 1:num.realized.1] / sigma.sq / 2
         t.hat = soln$solution[num.realized.0 + num.realized.1 + 1] / (2 * max.second.derivative^2)
         
+    } else if (optimizer == "SCS") {
+      
+        if (verbose) {
+            print(paste0("Running CVXR/SCS with problem of size: ",
+                         dim(Amat)[1], " x ", dim(Amat)[2], "..."))
+        }
+        
+        xx = CVXR::Variable(ncol(Amat))
+        objective = sum(Dmat.diagonal/2 * xx^2 + dvec * xx)
+        contraints = list(
+            Amat[1:meq,] %*% xx == bvec[1:meq],
+            Amat[(meq+1):nrow(Amat),] %*% xx >= bvec[(meq+1):nrow(Amat)]
+        )
+        cvx.problem = CVXR::Problem(CVXR::Minimize(objective), contraints)
+        cvx.output = solve(cvx.problem, solver = "SCS")
+        result = cvx.output$getValue(xx)
+        gamma.0[realized.idx.0] = - result[1:num.realized.0] / sigma.sq / 2
+        gamma.1[realized.idx.1] = - result[num.realized.0 + 1:num.realized.1] / sigma.sq / 2
+        t.hat = result[num.realized.0 + num.realized.1 + 1] / (2 * max.second.derivative^2)
+      
     } else if (optimizer == "mosek") {
         
         # We need to rescale our optimization parameters, such that Dmat has only

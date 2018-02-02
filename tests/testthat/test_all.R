@@ -51,6 +51,8 @@ rdd.free.qp = optrdd(X=X, Y=Y, W=W, max.second.derivative = max.second.derivativ
 rdd.cate.qp = optrdd(X=X, Y=Y, W=W, estimation.point = threshold, max.second.derivative = max.second.derivative, optimizer = "quadprog", verbose = FALSE)
 rdd.free.mk = optrdd(X=X, Y=Y, W=W, max.second.derivative = max.second.derivative, optimizer = "mosek", verbose = FALSE)
 rdd.cate.mk = optrdd(X=X, Y=Y, W=W, estimation.point = threshold, max.second.derivative = max.second.derivative, optimizer = "mosek", verbose = FALSE)
+rdd.free.scs = optrdd(X=X, Y=Y, W=W, max.second.derivative = max.second.derivative, optimizer = "SCS", verbose = FALSE)
+rdd.cate.scs = optrdd(X=X, Y=Y, W=W, estimation.point = threshold, max.second.derivative = max.second.derivative, optimizer = "SCS", verbose = FALSE)
 
 test_that("optimization strategies are equivalent", {
     expect_equal(rdd.free$tau.hat, rdd.free.raw$tau.hat, tolerance = rdd.free$tau.plusminus)
@@ -60,12 +62,20 @@ test_that("optimization strategies are equivalent", {
     expect_equal(rdd.free$tau.hat, rdd.free.mk$tau.hat, tolerance = 0.01)
     expect_equal(rdd.free$tau.plusminus, rdd.free.mk$tau.plusminus, tolerance = 0.01)
     
+    # SCS is not actually quite the same...
+    expect_equal(rdd.free$tau.hat, rdd.free.scs$tau.hat, tolerance = 0.05)
+    expect_equal(rdd.free$tau.plusminus, rdd.free.scs$tau.plusminus, tolerance = 0.05)
+    
     expect_equal(rdd.cate$tau.hat, rdd.cate.raw$tau.hat, tolerance = rdd.cate$tau.plusminus)
     expect_equal(rdd.cate$tau.plusminus, rdd.cate.raw$tau.plusminus, tolerance = 0.05)
     expect_equal(rdd.cate$tau.hat, rdd.cate.qp$tau.hat, tolerance = 0.01)
     expect_equal(rdd.cate$tau.plusminus, rdd.cate.qp$tau.plusminus, tolerance = 0.05)
     expect_equal(rdd.cate$tau.hat, rdd.cate.mk$tau.hat, tolerance = 0.01)
     expect_equal(rdd.cate$tau.plusminus, rdd.cate.mk$tau.plusminus, tolerance = 0.05)
+    
+    # SCS is not actually quite the same...
+    expect_equal(rdd.cate$tau.hat, rdd.cate.scs$tau.hat, tolerance = 0.05)
+    expect_equal(rdd.cate$tau.plusminus, rdd.cate.scs$tau.plusminus, tolerance = 0.12)
 })
 
 # Test sigma square estimation for optrdd
@@ -103,15 +113,20 @@ W = X.2d[, 1] < 0 | X.2d[, 2] < 0
 MOSEK = requireNamespace("Rmosek", quietly = TRUE)
 if (MOSEK) {
     rdd.2d.free = optrdd(X=X.2d, Y=Y, W=W, max.second.derivative = max.second.derivative,
-                         verbose = FALSE, spline.df = 20, bin.width = 0.05)
+                         verbose = FALSE, spline.df = 20, bin.width = 0.05, optimizer = "mosek")
     rdd.2d.cate = optrdd(X=X.2d, Y=Y, W=W, estimation.point = c(0, 0), max.second.derivative = max.second.derivative,
-                         verbose = FALSE, spline.df = 20, bin.width = 0.05)
+                         verbose = FALSE, spline.df = 20, bin.width = 0.05, optimizer = "mosek")
 } else { # if MOSEK isn't installed, make problem easier
     rdd.2d.free = optrdd(X=X.2d, Y=Y, W=W, max.second.derivative = max.second.derivative,
-                         verbose = FALSE, spline.df = 6, bin.width = 0.2)
+                         verbose = FALSE, spline.df = 6, bin.width = 0.2, optimizer = "quadprog")
     rdd.2d.cate = optrdd(X=X.2d, Y=Y, W=W, estimation.point = c(0, 0), max.second.derivative = max.second.derivative,
-                         verbose = FALSE, spline.df = 6, bin.width = 0.2)
+                         verbose = FALSE, spline.df = 6, bin.width = 0.2, optimizer = "quadprog")
 }
+
+rdd.2d.free.scs = optrdd(X=X.2d, Y=Y, W=W, max.second.derivative = max.second.derivative,
+                     verbose = FALSE, spline.df = 20, bin.width = 0.05, optimizer = "SCS")
+rdd.2d.cate.scs = optrdd(X=X.2d, Y=Y, W=W, estimation.point = c(0, 0), max.second.derivative = max.second.derivative,
+                     verbose = FALSE, spline.df = 20, bin.width = 0.05, optimizer = "SCS")
 
 
 test_that("2d-optrdd gammas satisfy constraints", {
@@ -126,14 +141,37 @@ test_that("2d-optrdd gammas satisfy constraints", {
     expect_equal(sum(rdd.2d.cate$gamma * X.2d[, 2]), 0, tolerance = tol)
     expect_equal(sum(rdd.2d.cate$gamma * W * X.2d[, 1]), 0, tolerance = tol)
     expect_equal(sum(rdd.2d.cate$gamma * W * X.2d[, 2]), 0, tolerance = tol)
+    
+    expect_equal(sum(rdd.2d.free.scs$gamma), 0)
+    expect_equal(sum(rdd.2d.free.scs$gamma * W), 1)
+    expect_equal(sum(rdd.2d.free.scs$gamma * X.2d[, 1]), 0, tolerance = tol)
+    expect_equal(sum(rdd.2d.free.scs$gamma * X.2d[, 2]), 0, tolerance = tol)
+    expect_equal(sum(rdd.2d.cate.scs$gamma), 0)
+    expect_equal(sum(rdd.2d.cate.scs$gamma * W), 1)
+    expect_equal(sum(rdd.2d.cate.scs$gamma * X.2d[, 1]), 0, tolerance = tol)
+    expect_equal(sum(rdd.2d.cate.scs$gamma * X.2d[, 2]), 0, tolerance = tol)
+    expect_equal(sum(rdd.2d.cate.scs$gamma * W * X.2d[, 1]), 0, tolerance = tol)
+    expect_equal(sum(rdd.2d.cate.scs$gamma * W * X.2d[, 2]), 0, tolerance = tol)
 })
 
-test_that("optimization strategies are equivalent", {
-    skip_if_not(MOSEK) # too slow without MOSEK
+test_that("MOSEK and SCS give same answer on 2d problem", {
+    expect_equal(rdd.2d.free$tau.hat, rdd.2d.free.scs$tau.hat, tolerance = 0.05)
+    expect_equal(rdd.2d.free$tau.plusminus, rdd.2d.free.scs$tau.plusminus, tolerance = 0.01)
+})
+
+test_that("Spline approximation doesn't affect MOSEK", {
+    skip_if_not(MOSEK)
     rdd.2d.free.raw = optrdd(X=X.2d, Y=Y, W=W, max.second.derivative = max.second.derivative,
-                             use.spline = FALSE, bin.width = 0.05, verbose = FALSE)
+                             use.spline = FALSE, bin.width = 0.05, verbose = FALSE, optimizer = "mosek")
     expect_equal(rdd.2d.free$tau.hat, rdd.2d.free.raw$tau.hat, tolerance = rdd.2d.free$tau.plusminus)
     expect_equal(rdd.2d.free$tau.plusminus, rdd.2d.free.raw$tau.plusminus, tolerance = 0.01)
+})
+
+test_that("Spline approximation doesn't affect SCS", {
+    rdd.2d.free.raw.scs = optrdd(X=X.2d, Y=Y, W=W, max.second.derivative = max.second.derivative,
+                             use.spline = FALSE, bin.width = 0.05, verbose = FALSE, optimizer = "SCS")
+    expect_equal(rdd.2d.free.scs$tau.hat, rdd.2d.free.raw.scs$tau.hat, tolerance = rdd.2d.free$tau.plusminus)
+    expect_equal(rdd.2d.free.scs$tau.plusminus, rdd.2d.free.raw.scs$tau.plusminus, tolerance = 0.07)
 })
 
 
