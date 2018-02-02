@@ -7,8 +7,8 @@
 optrdd(X, Y = NULL, W, max.second.derivative, estimation.point = NULL,
   sigma.sq = NULL, alpha = 0.95, lambda.mult = 1, bin.width = NULL,
   num.bucket = NULL, use.homoskedatic.variance = FALSE, use.spline = TRUE,
-  spline.df = NULL, optimizer = c("auto", "mosek", "quadprog"),
-  verbose = TRUE)
+  spline.df = NULL, optimizer = c("auto", "mosek", "ECOS", "quadprog",
+  "SCS"), verbose = TRUE)
 }
 \arguments{
 \item{X}{The running variables.}
@@ -43,8 +43,15 @@ improving computational performance.}
 
 \item{optimizer}{Which optimizer to use? Mosek is a commercial solver, but free
 academic licenses are available. Needs to be installed separately.
+ECOS is an open-source interior-point solver for conic problems,
+made available via the CVXR wrapper.
 Quadprog is the default R solver; it may be slow on large problems, but
-is very accurate on small problems. The option "auto" uses a heuristic to choose.}
+is very accurate on small problems.
+SCS is an open-source "operator splitting" solver that implements a first order
+method for solving very large cone programs to modest accuracy. The speed of SCS may
+be helpful for prototyping; however, the results may be noticeably less accurate.
+SCS is also accessed via the CVXR wrapper.
+The option "auto" uses a heuristic to choose.}
 
 \item{verbose}{whether the optimizer should print progress information}
 }
@@ -88,4 +95,17 @@ print(out.5); plot(out.5)
 out.6 = optrdd(X=X, Y=Y, W=W, max.second.derivative = 1, estimation.point = c(0, 0.5))
 print(out.6); plot(out.6)}
 
+}
+\references{
+Domahidi, A., Chu, E., & Boyd, S. (2013, July).
+ECOS: An SOCP solver for embedded systems.
+In Control Conference (ECC), 2013 European (pp. 3071-3076). IEEE.
+
+Imbens, G., & Wager, S. (2017).
+Optimized Regression Discontinuity Designs.
+arXiv preprint arXiv:1705.01677.
+
+O’Donoghue, B., Chu, E., Parikh, N., & Boyd, S. (2016).
+Conic optimization via operator splitting and homogeneous self-dual embedding.
+Journal of Optimization Theory and Applications, 169(3), 1042-1068.
 }

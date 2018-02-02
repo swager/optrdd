@@ -22,12 +22,30 @@
 #' @param spline.df Number of degrees of freedom (per running variable) used for spline computation.
 #' @param optimizer Which optimizer to use? Mosek is a commercial solver, but free
 #'                  academic licenses are available. Needs to be installed separately.
-#'                  SCS is ...
+#'                  ECOS is an open-source interior-point solver for conic problems,
+#'                  made available via the CVXR wrapper.
 #'                  Quadprog is the default R solver; it may be slow on large problems, but
-#'                  is very accurate on small problems. The option "auto" uses a heuristic to choose.
+#'                  is very accurate on small problems.
+#'                  SCS is an open-source "operator splitting" solver that implements a first order
+#'                  method for solving very large cone programs to modest accuracy. The speed of SCS may
+#'                  be helpful for prototyping; however, the results may be noticeably less accurate.
+#'                  SCS is also accessed via the CVXR wrapper.
+#'                  The option "auto" uses a heuristic to choose.
 #' @param verbose whether the optimizer should print progress information
 #'
 #' @return A trained optrdd object.
+#' 
+#' @references Domahidi, A., Chu, E., & Boyd, S. (2013, July).
+#' ECOS: An SOCP solver for embedded systems.
+#' In Control Conference (ECC), 2013 European (pp. 3071-3076). IEEE.
+#' 
+#' @references Imbens, G., & Wager, S. (2017).
+#' Optimized Regression Discontinuity Designs.
+#' arXiv preprint arXiv:1705.01677.
+#' 
+#' @references O’Donoghue, B., Chu, E., Parikh, N., & Boyd, S. (2016).
+#' Conic optimization via operator splitting and homogeneous self-dual embedding.
+#' Journal of Optimization Theory and Applications, 169(3), 1042-1068.
 #' 
 #' @examples
 #' # Simple regression discontinuity with discrete X
@@ -76,7 +94,7 @@ optrdd = function(X,
                   use.homoskedatic.variance = FALSE,
                   use.spline = TRUE,
                   spline.df = NULL,
-                  optimizer = c("auto", "mosek", "SCS", "quadprog"),
+                  optimizer = c("auto", "mosek", "ECOS", "quadprog", "SCS"),
                   verbose = TRUE) {
 
     n = length(W)
@@ -95,6 +113,8 @@ optrdd = function(X,
     univariate.monotone = (nvar == 1) &&
         ((max(X[W==0, 1]) <= min(X[W==1, 1])) || (max(X[W==1, 1]) <= min(X[W==0, 1])))
     
+    mosek_available = requireNamespace("Rmosek", quietly = TRUE)
+    
     optimizer = match.arg(optimizer)
     if (optimizer == "auto") {
         if (nvar == 1 &&
@@ -103,24 +123,32 @@ optrdd = function(X,
             length(unique(c(X))) <= 100) {
             optimizer = "quadprog"
         } else {
-            optimizer = "mosek"
+            if (mosek_available) {
+                optimizer = "mosek"
+            } else {
+                optimizer = "ECOS"
+            }
         }
     }
         
     
     if (optimizer == "mosek") {
-        if (!requireNamespace("Rmosek", quietly = TRUE)) {
-            optimizer = "quadprog"
-            if (nvar >= 2) {
-                op = options("warn")
-                on.exit(options(op))
-                options(warn=1)
-                warning(paste("The mosek optimizer is not installed; using quadprog instead.",
-                              "This may be very slow with more than one running variable."))
-            } else {
-                warning(paste("The mosek optimizer is not installed; using quadprog instead."))
-            }
+        if (!mosek_available) {
+            optimizer = "ECOS"
+            warning("The mosek optimizer is not installed; using ECOS instead.")
         }
+        # if (!requireNamespace("Rmosek", quietly = TRUE)) {
+        #     optimizer = "quadprog"
+        #     if (nvar >= 2) {
+        #         op = options("warn")
+        #         on.exit(options(op))
+        #         options(warn=1)
+        #         warning(paste("The mosek optimizer is not installed; using quadprog instead.",
+        #                       "This may be very slow with more than one running variable."))
+        #     } else {
+        #         warning(paste("The mosek optimizer is not installed; using quadprog instead."))
+        #     }
+        # }
     }  
     
     # Naive initialization for sigma.sq if needed
@@ -247,7 +275,7 @@ optrdd = function(X,
     # components in a quadratic spline basis.
     if (use.spline) {
         if (is.null(spline.df)) {
-            if (optimizer == "mosek" || optimizer == "SCS") {
+            if (optimizer == "mosek" || optimizer == "SCS" || optimizer == "ECOS") {
                 spline.df = c(100, 45 - 15 * cate.at.pt)[nvar]
             } else {
                 spline.df = c(40, 10)[nvar]
@@ -367,10 +395,15 @@ optrdd = function(X,
         gamma.1[realized.idx.1] = - soln$solution[num.realized.0 + 1:num.realized.1] / sigma.sq / 2
         t.hat = soln$solution[num.realized.0 + num.realized.1 + 1] / (2 * max.second.derivative^2)
         
-    } else if (optimizer == "SCS") {
+    } else if (optimizer == "SCS" || optimizer == "ECOS") {
       
-        if (verbose) {
+        if (verbose && optimizer == "SCS") {
             print(paste0("Running CVXR/SCS with problem of size: ",
+                         dim(Amat)[1], " x ", dim(Amat)[2], "..."))
+        }
+        
+        if (verbose && optimizer == "ECOS") {
+            print(paste0("Running CVXR/ECOS with problem of size: ",
                          dim(Amat)[1], " x ", dim(Amat)[2], "..."))
         }
         
@@ -381,7 +414,7 @@ optrdd = function(X,
             Amat[(meq+1):nrow(Amat),] %*% xx >= bvec[(meq+1):nrow(Amat)]
         )
         cvx.problem = CVXR::Problem(CVXR::Minimize(objective), contraints)
-        cvx.output = solve(cvx.problem, solver = "SCS")
+        cvx.output = solve(cvx.problem, solver = optimizer, verbose = verbose)
         result = cvx.output$getValue(xx)
         gamma.0[realized.idx.0] = - result[1:num.realized.0] / sigma.sq / 2
         gamma.1[realized.idx.1] = - result[num.realized.0 + 1:num.realized.1] / sigma.sq / 2
