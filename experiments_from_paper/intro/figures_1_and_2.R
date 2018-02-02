@@ -60,7 +60,8 @@ out = Reduce(cbind, lapply(maxerr.list, function(mm) rowSums(mm^2)))
 
 pdf("plots/mse_plot.pdf")
 pardef = par(mar = c(5, 4, 4, 2) + 0.5, cex.lab=1.5, cex.axis=1.5, cex.main=1.5, cex.sub=1.5)
-plot(nn.all, out[2,]/out[1,], log="x", ylim=range(c(1, range(out[2,]/out[1,]), range(out[3,]/out[1,]))), xlab="n", ylab = "Relative Excess Error", pch = 24, col = COLS[5], bg = COLS[5], cex = 1.5)
+plot(nn.all, out[2,]/out[1,], log="x", ylim=range(c(1, range(out[2,]/out[1,]), range(out[3,]/out[1,]))),
+     xlab="n", ylab = "Relative Excess Error", pch = 24, col = COLS[5], bg = COLS[5], cex = 1.5, xaxt="n")
 points(nn.all, out[3,]/out[1,], col = COLS[4], pch = 25, cex = 1.5, bg=COLS[4])
 abline(h=1, lty = 2, lwd = 2, col = 1)
 abline(h=1.05, lty = 4, lwd = 1)
@@ -68,6 +69,7 @@ abline(h=1.1, lty = 4, lwd = 1)
 abline(h=1.15, lty = 4, lwd = 1)
 abline(h=1.2, lty = 4, lwd = 1)
 legend("topleft", c("Rectangular Kernel", "Triangular Kernel"), pch = c(24, 25), col = COLS[5:4], pt.bg = COLS[5:4], cex = 1.5, bg="white")
+axis(1, at=c(500, 5000, 50000), labels=c(500, 5000, 50000))
 par=pardef
 dev.off()
 

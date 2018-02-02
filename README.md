@@ -15,6 +15,9 @@ Both optimizers appear to work well with a univariate running variable;
 however, with multi-dimensional running variables, we strongly recommend
 [installing mosek](INSTALLING_MOSEK.md).
 
+Replication files for Imbens and Wager (2017) are available in
+the directory `experiments_from_paper`.
+
 Example usage:
 
 ```R
