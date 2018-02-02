@@ -86,7 +86,7 @@ out.4 = optrdd(X=X, Y=Y, W=W, max.second.derivative = 0.5)
 print(out.4); plot(out.4, xlim = c(-2.5, 2.5))
 
 \dontrun{
-# RDD with multivariate running variable. Warning: slow without mosek.
+# RDD with multivariate running variable.
 X = matrix(runif(n*2, -1, 1), n, 2)
 W = as.numeric(X[,1] < 0 | X[,2] < 0)
 Y = X[,1]^2/3 + W * (1 + X[,2]) + rnorm(n)

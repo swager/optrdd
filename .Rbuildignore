@@ -3,3 +3,6 @@ README.md
 INSTALLING_MOSEK.md
 optrdd.Rproj
 baselines
+experiments_from_paper/*
+tests/testthat/test_all.R
+releases/*
