@@ -1,6 +1,6 @@
 Package: optrdd
 Title: Optimized Regression Discontinuity Designs
-Version: 0.9
+Version: 1.0
 Authors@R: c(
   person("Guido", "Imbens", email = "imbens@stanford.edu", role = c("aut")),
   person("Stefan", "Wager", email = "swager@stanford.edu", role = c("aut", "cre")))
@@ -9,7 +9,8 @@ Depends:
     R (>= 3.0.1)
 Imports: quadprog,
     splines,
-    Matrix
+    Matrix,
+    CVXR
 Suggests: Rmosek,
     RColorBrewer,
     testthat
