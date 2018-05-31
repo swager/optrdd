@@ -146,3 +146,70 @@ for (subject in subjects) {
 
 result_summaries = data.frame(Reduce(rbind, summaries))
 write.csv(result_summaries, file="output/result_summaries.csv")
+
+#
+# Sensitivity analysis for math and reading.
+#
+
+bvals = c(0.01, seq(0.25, 4, by = 0.25))
+COLS = RColorBrewer::brewer.pal(9, "Set1")
+
+Y = Y.math
+ci.math = sapply(bvals, function(max.second.derivative) {
+  optrdd.out = optrdd(X = X, Y = Y, W = W,
+                      max.second.derivative = max.second.derivative)
+  c(PT=optrdd.out$tau.hat,
+    LOW=optrdd.out$tau.hat - optrdd.out$tau.plusminus,
+    HIGH=optrdd.out$tau.hat + optrdd.out$tau.plusminus,
+    ESS=2/sum(optrdd.out$gamma^2),
+    ESST=1/sum(optrdd.out$gamma[W==1]^2),
+    ESSC=1/sum(optrdd.out$gamma[W==0]^2))
+})
+
+Y = Y.reading
+ci.reading = sapply(bvals, function(max.second.derivative) {
+  optrdd.out = optrdd(X = X, Y = Y, W = W,
+                      max.second.derivative = max.second.derivative)
+  c(PT=optrdd.out$tau.hat,
+    LOW=optrdd.out$tau.hat - optrdd.out$tau.plusminus,
+    HIGH=optrdd.out$tau.hat + optrdd.out$tau.plusminus,
+    ESS=2/sum(optrdd.out$gamma^2),
+    ESST=1/sum(optrdd.out$gamma[W==1]^2),
+    ESSC=1/sum(optrdd.out$gamma[W==0]^2))
+})
+
+pdf("output/math_sensitivity.pdf")
+pardef = par(mar = c(5, 4, 4, 2) + 0.5, cex.lab=1.5, cex.axis=1.5, cex.main=1.5, cex.sub=1.5)
+plot(bvals, ci.math[1,], type = "l", lwd = 3,
+     xlim = c(0, max(bvals)), ylim = range(ci.math[1:3,], ci.reading[1:3,]),
+     xlab = "max second derivative",
+     ylab = "tau", col = COLS[7])
+lines(bvals, ci.math[2,], lty = 2, lwd = 3, col = COLS[5])
+lines(bvals, ci.math[3,], lty = 2, lwd = 3, col = COLS[5])
+abline(h = 0, lty = 1)
+abline(v = 0.5, lty = 3)
+abline(v = 1, lty = 3)
+dev.off()
+
+pdf("output/reading_sensitivity.pdf")
+pardef = par(mar = c(5, 4, 4, 2) + 0.5, cex.lab=1.5, cex.axis=1.5, cex.main=1.5, cex.sub=1.5)
+plot(bvals, ci.reading[1,], type = "l", lwd = 3,
+     xlim = c(0, max(bvals)), ylim = range(ci.math[1:3,], ci.reading[1:3,]),
+     xlab = "max second derivative",
+     ylab = "tau", col = COLS[7])
+lines(bvals, ci.reading[2,], lty = 2, lwd = 3, col = COLS[5])
+lines(bvals, ci.reading[3,], lty = 2, lwd = 3, col = COLS[5])
+abline(h = 0, lty = 1)
+abline(v = 0.5, lty = 3)
+abline(v = 1, lty = 3)
+dev.off()
+
+pdf("output/effective_ss.pdf")
+pardef = par(mar = c(5, 4, 4, 2) + 0.5, cex.lab=1.5, cex.axis=1.5, cex.main=1.5, cex.sub=1.5)
+plot(bvals[-1], ci.math[5,-1], type = "l", lwd = 3,
+     ylim = range(ci.math[5:6,-1]),
+     xlab = "max second derivative",
+     ylab = "effective sample size", col = COLS[1], log = "xy")
+lines(bvals[-1], ci.math[6,-1], lty = 5, col = COLS[2], lwd = 3)
+legend("topright", c("Treated", "Controls"), col = COLS[1:2], lwd = 3, lty = c(1, 5), cex = 1.5)
+dev.off()
