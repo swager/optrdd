@@ -331,7 +331,7 @@ optrdd = function(X,
     # We now impose constrains on Amat %*% params.
     # The first meq constrains are equality constraints (Amat %*% params = 0);
     # the remaining ones are inequalities (Amat %*% params >= 0).
-    Amat = Matrix::rBind(
+    Amat = rbind(
         # Defines G(0) in terms of the other problem parameters (equality constraint)
         cbind(Matrix::Diagonal(num.realized.0, -1),
               Matrix::Matrix(0, num.realized.0, num.realized.1),
@@ -434,7 +434,7 @@ optrdd = function(X,
         # a parameter "S" and "ONE", that are characterized by a second-order cone constraint
         # S * ONE >= 1/2 {params}' Dmat {params},
         # and the equality constraint ONE = 1
-        mosek.problem$A <- Matrix::cBind(A.natural, Matrix::Matrix(0, nrow(A.natural), 2))
+        mosek.problem$A <- cbind(A.natural, Matrix::Matrix(0, nrow(A.natural), 2))
         mosek.problem$bc <- rbind(blc = rep(0, nrow(A.natural)), buc = c(rep(0, meq), rep(Inf, nrow(A.natural) - meq)))
         mosek.problem$bx <- rbind(blx = c(rep(-Inf, ncol(A.natural)), 0, 1), bux = c(rep(Inf, ncol(A.natural)), Inf, 1))
         

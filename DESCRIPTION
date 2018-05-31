@@ -1,12 +1,12 @@
 Package: optrdd
 Title: Optimized Regression Discontinuity Designs
-Version: 1.0
+Version: 1.0.1
 Authors@R: c(
   person("Guido", "Imbens", email = "imbens@stanford.edu", role = c("aut")),
   person("Stefan", "Wager", email = "swager@stanford.edu", role = c("aut", "cre")))
 Description: Optimized inference in regression discontinuity designs, as proposed by Imbens and Wager (2017) <arXiv:1705.01677>.
 Depends:
-    R (>= 3.0.1)
+    R (>= 3.2.0)
 Imports: quadprog,
     splines,
     Matrix,
