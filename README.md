@@ -57,5 +57,6 @@ print(out.6); plot(out.6)
 
 #### References
 Guido Imbens and Stefan Wager.
-<b>Optimized Regression Discontinuity Designs.</b> 2017.
+<b>Optimized Regression Discontinuity Designs.</b>
+<i>Review of Economics and Statistics</i>, forthcoming.
 [<a href="https://arxiv.org/pdf/1705.01677.pdf">arxiv</a>]
