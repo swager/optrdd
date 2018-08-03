@@ -415,6 +415,13 @@ optrdd = function(X,
         )
         cvx.problem = CVXR::Problem(CVXR::Minimize(objective), contraints)
         cvx.output = solve(cvx.problem, solver = optimizer, verbose = verbose)
+        
+        if (cvx.output$status != "optimal") {
+            warning(paste0("CVXR returned with status: ",
+                           cvx.output$status,
+                           ". For better results, try another optimizer (MOSEK is recommended)."))
+        }
+        
         result = cvx.output$getValue(xx)
         gamma.0[realized.idx.0] = - result[1:num.realized.0] / sigma.sq / 2
         gamma.1[realized.idx.1] = - result[num.realized.0 + 1:num.realized.1] / sigma.sq / 2
@@ -451,6 +458,12 @@ optrdd = function(X,
             mosek.out = Rmosek::mosek(mosek.problem)
         } else {
             mosek.out = Rmosek::mosek(mosek.problem, opts=list(verbose=0))
+        }
+        
+        if (mosek.out$response$code != 0) {
+            warning(paste("MOSEK returned with status",
+                          mosek.out$response$msg,
+                          "For better results, try another optimizer."))
         }
         
         # We now also need to re-adjust for "natural" scaling
