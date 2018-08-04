@@ -7,8 +7,8 @@
 optrdd(X, Y = NULL, W, max.second.derivative, estimation.point = NULL,
   sigma.sq = NULL, alpha = 0.95, lambda.mult = 1, bin.width = NULL,
   num.bucket = NULL, use.homoskedatic.variance = FALSE, use.spline = TRUE,
-  spline.df = NULL, optimizer = c("auto", "mosek", "ECOS", "quadprog",
-  "SCS"), verbose = TRUE)
+  spline.df = NULL, try.elnet.for.sigma.sq = c("auto", "yes", "no"),
+  optimizer = c("auto", "mosek", "ECOS", "quadprog", "SCS"), verbose = TRUE)
 }
 \arguments{
 \item{X}{The running variables.}
@@ -40,6 +40,8 @@ in order to reduce the number of optimization parameters, and potentially
 improving computational performance.}
 
 \item{spline.df}{Number of degrees of freedom (per running variable) used for spline computation.}
+
+\item{try.elnet.for.sigma.sq}{Whether an elastic net on a spline basis should be used for estimating sigma^2.}
 
 \item{optimizer}{Which optimizer to use? Mosek is a commercial solver, but free
 academic licenses are available. Needs to be installed separately.

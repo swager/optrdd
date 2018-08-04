@@ -10,7 +10,8 @@ Depends:
 Imports: quadprog,
     splines,
     Matrix,
-    CVXR
+    CVXR,
+    glmnet
 Suggests: Rmosek,
     RColorBrewer,
     testthat
