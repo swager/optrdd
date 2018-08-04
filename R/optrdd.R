@@ -20,6 +20,7 @@
 #'                   in order to reduce the number of optimization parameters, and potentially
 #'                   improving computational performance.
 #' @param spline.df Number of degrees of freedom (per running variable) used for spline computation.
+#' @param try.elnet.for.sigma.sq Whether an elastic net on a spline basis should be used for estimating sigma^2.
 #' @param optimizer Which optimizer to use? Mosek is a commercial solver, but free
 #'                  academic licenses are available. Needs to be installed separately.
 #'                  ECOS is an open-source interior-point solver for conic problems,
@@ -94,6 +95,7 @@ optrdd = function(X,
                   use.homoskedatic.variance = FALSE,
                   use.spline = TRUE,
                   spline.df = NULL,
+                  try.elnet.for.sigma.sq = c("auto", "yes", "no"),
                   optimizer = c("auto", "mosek", "ECOS", "quadprog", "SCS"),
                   verbose = TRUE) {
 
@@ -160,6 +162,26 @@ optrdd = function(X,
         } else {
             Y.hat = stats::predict(stats::lm(Y ~ X * W))
             sigma.sq = mean((Y - Y.hat)^2) * length(W) / (length(W) - 2 - 2 * nvar)
+            
+            try.elnet.for.sigma.sq = match.arg(try.elnet.for.sigma.sq)
+            if(ncol(X) > 1 & try.elnet.for.sigma.sq == "yes") {
+                stop("Elastic net for sigma squared not implemented with more than 1 running variable.")
+            }
+            if (ncol(X) == 1 & (try.elnet.for.sigma.sq == "yes" |
+                                try.elnet.for.sigma.sq == "auto" & length(W) > 200)) {
+                linear.params = 1 + 2 * ncol(X)
+                elnet.df = 7
+                ridge.mat = cbind(W, X, W * X, matrix(0, length(W), 2 * elnet.df))
+                ridge.mat[W==0, linear.params + 1:elnet.df] = splines::ns(X[W==0,], df = elnet.df)
+                ridge.mat[W==1, linear.params + elnet.df + 1:elnet.df] = splines::ns(X[W==1,], df = elnet.df)
+                elnet = glmnet::cv.glmnet(ridge.mat, Y,
+                                          penalty.factor = c(rep(0, linear.params),
+                                                             rep(1, 2 * elnet.df)),
+                                          keep = TRUE, alpha = 0.5)
+                elnet.hat = elnet$fit.preval[,!is.na(colSums(elnet$fit.preval)),drop=FALSE][, elnet$lambda == elnet$lambda.1se]
+                sigma.sq.elnet = mean((elnet.hat - Y)^2)
+                sigma.sq = min(sigma.sq, sigma.sq.elnet)
+            }
         }
     }
     
