@@ -500,12 +500,15 @@ optrdd = function(X,
         if (use.homoskedatic.variance) {
             se.hat.tau = sqrt(sum(gamma^2 * sigma.sq))
         } else {
-            # A heteroskedaticity-robust variance estimate
-            regr.df = data.frame(X=X, W=W, Y=Y)
-            Y.fit = stats::lm(Y ~ X * W, data = regr.df)
-            Y.resid.sq = (Y - stats::predict(Y.fit))^2 * length(W) /
-                (length(W) - 2 * (1 + nvar))
-            se.hat.tau = sqrt(sum(Y.resid.sq * gamma^2))
+            # A heteroskedaticity-robust variance estimate.
+            # Weight the regression towards areas used in estimation, so we are not
+            # too vulnerable to curvature effects far from the boundary.
+            regr.df = data.frame(X=X, W=W, Y=Y, gamma.sq = gamma^2)
+            regr.df = regr.df[regr.df$gamma.sq != 0,]
+            Y.fit = stats::lm(Y ~ X * W, data = regr.df, weights = regr.df$gamma.sq)
+            self.influence = stats::lm.influence(Y.fit)$hat
+            Y.resid.sq = (regr.df$Y - stats::predict(Y.fit))^2
+            se.hat.tau = sqrt(sum(Y.resid.sq * regr.df$gamma.sq / (1 - self.influence)))
         }
         
         # Confidence intervals that account for both bias and variance
