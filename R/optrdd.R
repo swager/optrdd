@@ -99,6 +99,7 @@ optrdd = function(X,
 
     n = length(W)
     if (class(W) == "logical") W = as.numeric(W)
+    if (!all(W %in% c(0, 1))) stop("The treatment assignment W must be binary.")
     if (!is.null(Y) & (length(Y) != n)) { stop("Y and W must have same length.") }
     if (is.null(dim(X))) { X = matrix(X, ncol = 1) }
     if (nrow(X) != n) { stop("The number of rows of X and the length of W must match") }
