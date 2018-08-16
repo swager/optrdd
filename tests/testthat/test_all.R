@@ -1,3 +1,5 @@
+context("Test that answers from optimizers match.")
+
 set.seed(1)
 
 max.second.derivative = 1

@@ -1,3 +1,5 @@
+context("Test behavior on example with strong curvature.")
+
 set.seed(1)
 
 ludwig.miller = Vectorize(function(x) {

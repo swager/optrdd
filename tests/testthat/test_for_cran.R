@@ -1,3 +1,5 @@
+context("Run tests for CRAN.")
+
 set.seed(1)
 
 max.second.derivative = 1
