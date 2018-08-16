@@ -62,8 +62,8 @@ rdd.free = optrdd(X=X, Y=Y, W=W, max.second.derivative = max.second.derivative, 
 rdd.cate = optrdd(X=X, Y=Y, W=W, estimation.point = threshold, max.second.derivative = max.second.derivative, optimizer = "quadprog", verbose = FALSE)
 rdd.free.ecos = optrdd(X=X, Y=Y, W=W, max.second.derivative = max.second.derivative, optimizer = "ECOS", verbose = FALSE)
 rdd.cate.ecos = optrdd(X=X, Y=Y, W=W, estimation.point = threshold, max.second.derivative = max.second.derivative, optimizer = "ECOS", verbose = FALSE)
-rdd.free.scs = optrdd(X=X, Y=Y, W=W, max.second.derivative = max.second.derivative, optimizer = "SCS", verbose = FALSE)
-rdd.cate.scs = optrdd(X=X, Y=Y, W=W, estimation.point = threshold, max.second.derivative = max.second.derivative, optimizer = "SCS", verbose = FALSE)
+expect_warning(rdd.free.scs <- optrdd(X=X, Y=Y, W=W, max.second.derivative = max.second.derivative, optimizer = "SCS", verbose = FALSE))
+expect_warning(rdd.cate.scs <- optrdd(X=X, Y=Y, W=W, estimation.point = threshold, max.second.derivative = max.second.derivative, optimizer = "SCS", verbose = FALSE))
 
 test_that("optimization strategies are equivalent", {
 
@@ -122,10 +122,10 @@ rdd.2d.free.ecos = optrdd(X=X.2d, Y=Y, W=W, max.second.derivative = max.second.d
                          verbose = FALSE, spline.df = 20, bin.width = 0.05, optimizer = "ECOS")
 rdd.2d.cate.ecos = optrdd(X=X.2d, Y=Y, W=W, estimation.point = c(0, 0), max.second.derivative = max.second.derivative,
                          verbose = FALSE, spline.df = 20, bin.width = 0.05, optimizer = "ECOS")
-rdd.2d.free.scs = optrdd(X=X.2d, Y=Y, W=W, max.second.derivative = max.second.derivative,
-                     verbose = FALSE, spline.df = 20, bin.width = 0.05, optimizer = "SCS")
-rdd.2d.cate.scs = optrdd(X=X.2d, Y=Y, W=W, estimation.point = c(0, 0), max.second.derivative = max.second.derivative,
-                     verbose = FALSE, spline.df = 20, bin.width = 0.05, optimizer = "SCS")
+expect_warning(rdd.2d.free.scs <- optrdd(X=X.2d, Y=Y, W=W, max.second.derivative = max.second.derivative,
+                                         verbose = FALSE, spline.df = 20, bin.width = 0.05, optimizer = "SCS"))
+expect_warning(rdd.2d.cate.scs <- optrdd(X=X.2d, Y=Y, W=W, estimation.point = c(0, 0), max.second.derivative = max.second.derivative,
+                                         verbose = FALSE, spline.df = 20, bin.width = 0.05, optimizer = "SCS"))
 
 test_that("2d-optrdd gammas satisfy constraints with quadprog", {
     tol = 0.05 # note the somewhate loose tolerance

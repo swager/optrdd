@@ -53,8 +53,8 @@ rdd.free.mk = optrdd(X=X, Y=Y, W=W, max.second.derivative = max.second.derivativ
 rdd.cate.mk = optrdd(X=X, Y=Y, W=W, estimation.point = threshold, max.second.derivative = max.second.derivative, optimizer = "mosek", verbose = FALSE)
 rdd.free.ecos = optrdd(X=X, Y=Y, W=W, max.second.derivative = max.second.derivative, optimizer = "ECOS", verbose = FALSE)
 rdd.cate.ecos = optrdd(X=X, Y=Y, W=W, estimation.point = threshold, max.second.derivative = max.second.derivative, optimizer = "ECOS", verbose = FALSE)
-rdd.free.scs = optrdd(X=X, Y=Y, W=W, max.second.derivative = max.second.derivative, optimizer = "SCS", verbose = FALSE)
-rdd.cate.scs = optrdd(X=X, Y=Y, W=W, estimation.point = threshold, max.second.derivative = max.second.derivative, optimizer = "SCS", verbose = FALSE)
+expect_warning(rdd.free.scs <- optrdd(X=X, Y=Y, W=W, max.second.derivative = max.second.derivative, optimizer = "SCS", verbose = FALSE))
+expect_warning(rdd.cate.scs <- optrdd(X=X, Y=Y, W=W, estimation.point = threshold, max.second.derivative = max.second.derivative, optimizer = "SCS", verbose = FALSE))
 
 test_that("optimization strategies are equivalent", {
     expect_equal(rdd.free$tau.hat, rdd.free.raw$tau.hat, tolerance = rdd.free$tau.plusminus)
@@ -132,10 +132,10 @@ rdd.2d.free.ecos = optrdd(X=X.2d, Y=Y, W=W, max.second.derivative = max.second.d
                          verbose = FALSE, spline.df = 20, bin.width = 0.05, optimizer = "ECOS")
 rdd.2d.cate.ecos = optrdd(X=X.2d, Y=Y, W=W, estimation.point = c(0, 0), max.second.derivative = max.second.derivative,
                          verbose = FALSE, spline.df = 20, bin.width = 0.05, optimizer = "ECOS")
-rdd.2d.free.scs = optrdd(X=X.2d, Y=Y, W=W, max.second.derivative = max.second.derivative,
-                     verbose = FALSE, spline.df = 20, bin.width = 0.05, optimizer = "SCS")
-rdd.2d.cate.scs = optrdd(X=X.2d, Y=Y, W=W, estimation.point = c(0, 0), max.second.derivative = max.second.derivative,
-                     verbose = FALSE, spline.df = 20, bin.width = 0.05, optimizer = "SCS")
+expect_warning(rdd.2d.free.scs <- optrdd(X=X.2d, Y=Y, W=W, max.second.derivative = max.second.derivative,
+                     verbose = FALSE, spline.df = 20, bin.width = 0.05, optimizer = "SCS"))
+expect_warning(rdd.2d.cate.scs <- optrdd(X=X.2d, Y=Y, W=W, estimation.point = c(0, 0), max.second.derivative = max.second.derivative,
+                     verbose = FALSE, spline.df = 20, bin.width = 0.05, optimizer = "SCS"))
 
 
 test_that("2d-optrdd gammas satisfy constraints with mosek", {
@@ -213,8 +213,8 @@ rdd.2d.free.raw.mk = optrdd(X=X.2d, Y=Y, W=W, max.second.derivative = max.second
                          use.spline = FALSE, bin.width = 0.05, verbose = FALSE, optimizer = "mosek")
 rdd.2d.free.raw.ecos = optrdd(X=X.2d, Y=Y, W=W, max.second.derivative = max.second.derivative,
                              use.spline = FALSE, bin.width = 0.05, verbose = FALSE, optimizer = "ECOS")
-rdd.2d.free.raw.scs = optrdd(X=X.2d, Y=Y, W=W, max.second.derivative = max.second.derivative,
-                             use.spline = FALSE, bin.width = 0.05, verbose = FALSE, optimizer = "SCS")
+expect_warning(rdd.2d.free.raw.scs <- optrdd(X=X.2d, Y=Y, W=W, max.second.derivative = max.second.derivative,
+                                             use.spline = FALSE, bin.width = 0.05, verbose = FALSE, optimizer = "SCS"))
 
 test_that("Spline approximation doesn't affect MOSEK", {
     expect_equal(rdd.2d.free.mk$tau.hat, rdd.2d.free.raw.mk$tau.hat, tolerance = rdd.2d.free.mk$tau.plusminus)

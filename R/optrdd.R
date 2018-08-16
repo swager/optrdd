@@ -180,8 +180,14 @@ optrdd = function(X,
         #         warning(paste("The mosek optimizer is not installed; using quadprog instead."))
         #     }
         # }
-    }  
-    
+    }
+
+    if (optimizer == "SCS") {
+        warning(paste("SCS is a fast an free optimizer, but doesn't solve the problem exactly.",
+                      "Resulting confidence intervals may be needlessly long.",
+                      "It is recommended to also try MOSEK."))
+    }
+
     # Create discrete grid on which to optimize, and assign each training example
     # to a cell.
     if (nvar == 1) {
