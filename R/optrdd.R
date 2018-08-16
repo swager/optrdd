@@ -95,7 +95,7 @@ optrdd = function(X,
                   use.homoskedatic.variance = FALSE,
                   use.spline = TRUE,
                   spline.df = NULL,
-                  try.elnet.for.sigma.sq = c("auto", "yes", "no"),
+                  try.elnet.for.sigma.sq = FALSE,
                   optimizer = c("auto", "mosek", "ECOS", "quadprog", "SCS"),
                   verbose = TRUE) {
 
@@ -117,13 +117,42 @@ optrdd = function(X,
         ((max(X[W==0, 1]) <= min(X[W==1, 1])) || (max(X[W==1, 1]) <= min(X[W==0, 1])))
     
     mosek_available = requireNamespace("Rmosek", quietly = TRUE)
-    
+
+    # Naive initialization for sigma.sq if needed
+    if (is.null(sigma.sq)) {
+        if (is.null(Y)) {
+            warning("Setting noise level to 1 as default...")
+            sigma.sq = 1
+        } else {
+            Y.hat = stats::predict(stats::lm(Y ~ X * W))
+            sigma.sq = mean((Y - Y.hat)^2) * length(W) / (length(W) - 2 - 2 * nvar)
+            if (try.elnet.for.sigma.sq){
+                if(ncol(X) > 1) {
+                    stop("Elastic net for sigma squared not implemented with more than 1 running variable.")
+                }
+                linear.params = 1 + 2 * ncol(X)
+                elnet.df = 7
+                ridge.mat = cbind(W, X, W * X, matrix(0, length(W), 2 * elnet.df))
+                ridge.mat[W==0, linear.params + 1:elnet.df] = splines::ns(X[W==0,], df = elnet.df)
+                ridge.mat[W==1, linear.params + elnet.df + 1:elnet.df] = splines::ns(X[W==1,], df = elnet.df)
+                elnet = glmnet::cv.glmnet(ridge.mat, Y,
+                                          penalty.factor = c(rep(0, linear.params),
+                                                             rep(1, 2 * elnet.df)),
+                                          keep = TRUE, alpha = 0.5)
+                elnet.hat = elnet$fit.preval[,!is.na(colSums(elnet$fit.preval)),drop=FALSE][, elnet$lambda == elnet$lambda.1se]
+                sigma.sq.elnet = mean((elnet.hat - Y)^2)
+                sigma.sq = min(sigma.sq, sigma.sq.elnet)
+            }
+        }
+    }
+
     optimizer = match.arg(optimizer)
     if (optimizer == "auto") {
         if (nvar == 1 &&
             use.spline &&
             (univariate.monotone || !cate.at.pt) &&
-            length(unique(c(X))) <= 100) {
+            length(unique(c(X))) <= 100 &&
+            max.second.derivative / sigma.sq <= 4) {
             optimizer = "quadprog"
         } else {
             if (mosek_available) {
@@ -133,8 +162,7 @@ optrdd = function(X,
             }
         }
     }
-        
-    
+
     if (optimizer == "mosek") {
         if (!mosek_available) {
             optimizer = "ECOS"
@@ -153,37 +181,6 @@ optrdd = function(X,
         #     }
         # }
     }  
-    
-    # Naive initialization for sigma.sq if needed
-    if (is.null(sigma.sq)) {
-        if (is.null(Y)) {
-            warning("Setting noise level to 1 as default...")
-            sigma.sq = 1
-        } else {
-            Y.hat = stats::predict(stats::lm(Y ~ X * W))
-            sigma.sq = mean((Y - Y.hat)^2) * length(W) / (length(W) - 2 - 2 * nvar)
-            
-            try.elnet.for.sigma.sq = match.arg(try.elnet.for.sigma.sq)
-            if(ncol(X) > 1 & try.elnet.for.sigma.sq == "yes") {
-                stop("Elastic net for sigma squared not implemented with more than 1 running variable.")
-            }
-            if (ncol(X) == 1 & (try.elnet.for.sigma.sq == "yes" |
-                                try.elnet.for.sigma.sq == "auto" & length(W) > 200)) {
-                linear.params = 1 + 2 * ncol(X)
-                elnet.df = 7
-                ridge.mat = cbind(W, X, W * X, matrix(0, length(W), 2 * elnet.df))
-                ridge.mat[W==0, linear.params + 1:elnet.df] = splines::ns(X[W==0,], df = elnet.df)
-                ridge.mat[W==1, linear.params + elnet.df + 1:elnet.df] = splines::ns(X[W==1,], df = elnet.df)
-                elnet = glmnet::cv.glmnet(ridge.mat, Y,
-                                          penalty.factor = c(rep(0, linear.params),
-                                                             rep(1, 2 * elnet.df)),
-                                          keep = TRUE, alpha = 0.5)
-                elnet.hat = elnet$fit.preval[,!is.na(colSums(elnet$fit.preval)),drop=FALSE][, elnet$lambda == elnet$lambda.1se]
-                sigma.sq.elnet = mean((elnet.hat - Y)^2)
-                sigma.sq = min(sigma.sq, sigma.sq.elnet)
-            }
-        }
-    }
     
     # Create discrete grid on which to optimize, and assign each training example
     # to a cell.
@@ -531,6 +528,12 @@ optrdd = function(X,
             self.influence = stats::lm.influence(Y.fit)$hat
             Y.resid.sq = (regr.df$Y - stats::predict(Y.fit))^2
             se.hat.tau = sqrt(sum(Y.resid.sq * regr.df$gamma.sq / (1 - self.influence)))
+
+            if (!try.elnet.for.sigma.sq & se.hat.tau^2 < 0.8 * sum(regr.df$gamma.sq) * sigma.sq) {
+                warning(paste("Implicit estimate of sigma^2 may be too pessimistic,",
+                              "resulting in valid but needlessly long confidence intervals.",
+                              "Try the option `try.elnet.for.sigma.sq = TRUE` for potentially improved performance."))
+            }
         }
         
         # Confidence intervals that account for both bias and variance

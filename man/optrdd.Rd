@@ -7,8 +7,8 @@
 optrdd(X, Y = NULL, W, max.second.derivative, estimation.point = NULL,
   sigma.sq = NULL, alpha = 0.95, lambda.mult = 1, bin.width = NULL,
   num.bucket = NULL, use.homoskedatic.variance = FALSE, use.spline = TRUE,
-  spline.df = NULL, try.elnet.for.sigma.sq = c("auto", "yes", "no"),
-  optimizer = c("auto", "mosek", "ECOS", "quadprog", "SCS"), verbose = TRUE)
+  spline.df = NULL, try.elnet.for.sigma.sq = FALSE, optimizer = c("auto",
+  "mosek", "ECOS", "quadprog", "SCS"), verbose = TRUE)
 }
 \arguments{
 \item{X}{The running variables.}
