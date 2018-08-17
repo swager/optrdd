@@ -1,6 +1,6 @@
 Package: optrdd
 Title: Optimized Regression Discontinuity Designs
-Version: 1.0.1
+Version: 1.0.2
 Authors@R: c(
   person("Guido", "Imbens", email = "imbens@stanford.edu", role = c("aut")),
   person("Stefan", "Wager", email = "swager@stanford.edu", role = c("aut", "cre")))
