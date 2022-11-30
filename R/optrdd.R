@@ -338,8 +338,9 @@ optrdd = function(X,
     # If we are in one dimension and have a threshold RDD, it is
     # enough to estimate a single nuisance function f0.
     change.slope = cate.at.pt
-    two.fun = cate.at.pt & !univariate.monotone
-    
+    #two.fun = cate.at.pt & !univariate.monotone
+    two.fun = TRUE
+                               
     # We now prepare inputs to a numerical optimizer. We seek to
     # solve a discretized version of equation (18) from Imbens and Wager (2017).
     # The parameters to the problem are ordered as (G(0), G(1), lambda, f0, f1).
