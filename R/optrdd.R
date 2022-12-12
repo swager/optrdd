@@ -441,7 +441,7 @@ optrdd = function(X,
             Amat[(meq+1):nrow(Amat),] %*% xx >= bvec[(meq+1):nrow(Amat)]
         )
         cvx.problem = CVXR::Problem(CVXR::Minimize(objective), contraints)
-        cvx.output = solve(cvx.problem, solver = optimizer, verbose = verbose)
+        cvx.output = CVXR::solve(cvx.problem, solver = optimizer, verbose = verbose)
         
         if (cvx.output$status != "optimal") {
             warning(paste0("CVXR returned with status: ",
