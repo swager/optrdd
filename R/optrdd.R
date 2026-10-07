@@ -363,14 +363,14 @@ optrdd = function(X,
         cbind(Matrix::Diagonal(num.realized.0, -1),
               Matrix::Matrix(0, num.realized.0, num.realized.1),
               0, 0, 1, xx.centered[realized.idx.0,],
-              if(change.slope) { -xx.centered[realized.idx.0,] } else { numeric() },
+              if(change.slope) { -xx.centered[realized.idx.0,] } else { NULL },
               selector.0,
-              if(two.fun) { Matrix::Matrix(0, num.realized.0, num.df) } else { numeric() }),
+              if(two.fun) { Matrix::Matrix(0, num.realized.0, num.df) } else { NULL }),
         # Defines G(1) in terms of the other problem parameters (equality constraint)
         cbind(Matrix::Matrix(0, num.realized.1, num.realized.0),
               Matrix::Diagonal(num.realized.1, -1),
               0, 1, 0, xx.centered[realized.idx.1,],
-              if(change.slope) { xx.centered[realized.idx.1,] } else { numeric() },
+              if(change.slope) { xx.centered[realized.idx.1,] } else { NULL },
               if(two.fun) {
                   cbind(Matrix::Matrix(0, num.realized.1, num.df), selector.1)
               } else {
@@ -383,13 +383,13 @@ optrdd = function(X,
         if(two.fun) {
             cbind(Matrix::Matrix(0, length(zeroed.idx), num.realized.0 + num.realized.1 + num.lambda + num.df),
                   centering.matrix)
-        } else { numeric() },
+        } else { NULL },
         # Bound the second derivative of f_0 by lambda_1
         cbind(Matrix::Matrix(0, 2 * nrow(D2), num.realized.0 + num.realized.1),
               bin.width^2,
               matrix(0, 2 * nrow(D2), num.lambda - 1),
               rbind(D2, -D2),
-              if (two.fun) { Matrix::Matrix(0, 2 * nrow(D2), num.df) } else { numeric() }),
+              if (two.fun) { Matrix::Matrix(0, 2 * nrow(D2), num.df) } else { NULL }),
         # Bound the second derivative of f_1 by lambda_1
         if (two.fun) {
             cbind(Matrix::Matrix(0, 2 * nrow(D2), num.realized.0 + num.realized.1),
@@ -435,21 +435,40 @@ optrdd = function(X,
         }
         
         xx = CVXR::Variable(ncol(Amat))
-        objective = sum(Dmat.diagonal/2 * xx^2 + dvec * xx)
+        # The quadratic term is written with sum_squares rather than as an
+        # elementwise product with xx^2. CVXR 1.8.2 passes SCS a quadratic
+        # objective directly and drops the elementwise weights in the latter
+        # form, silently solving a different problem (fixed in CVXR 1.9).
+        objective = CVXR::sum_squares(sqrt(Dmat.diagonal/2) * xx) + sum(dvec * xx)
+        # Wrap the sparse constraint matrices in CVXR::Constant: recent CVXR
+        # releases no longer dispatch `%*%` when the left operand is a
+        # Matrix object and the right one is a CVXR variable.
         contraints = list(
-            Amat[1:meq,] %*% xx == bvec[1:meq],
-            Amat[(meq+1):nrow(Amat),] %*% xx >= bvec[(meq+1):nrow(Amat)]
+            CVXR::Constant(Amat[1:meq,]) %*% xx == bvec[1:meq],
+            CVXR::Constant(Amat[(meq+1):nrow(Amat),]) %*% xx >= bvec[(meq+1):nrow(Amat)]
         )
         cvx.problem = CVXR::Problem(CVXR::Minimize(objective), contraints)
-        cvx.output = CVXR::solve(cvx.problem, solver = optimizer, verbose = verbose)
         
-        if (cvx.output$status != "optimal") {
+        # CVXR 1.8 replaced the exported solve() and the $getValue() accessor
+        # by psolve(), status() and value(). Support both interfaces.
+        cvxr.exports = getNamespaceExports("CVXR")
+        if ("psolve" %in% cvxr.exports) {
+            CVXR::psolve(cvx.problem, solver = optimizer, verbose = verbose)
+            cvx.status = CVXR::status(cvx.problem)
+            result = as.numeric(CVXR::value(xx))
+        } else {
+            cvx.solve = getExportedValue("CVXR", "solve")
+            cvx.output = cvx.solve(cvx.problem, solver = optimizer, verbose = verbose)
+            cvx.status = cvx.output$status
+            result = as.numeric(cvx.output$getValue(xx))
+        }
+        
+        if (cvx.status != "optimal") {
             warning(paste0("CVXR returned with status: ",
-                           cvx.output$status,
+                           cvx.status,
                            ". For better results, try another optimizer (MOSEK is recommended)."))
         }
         
-        result = cvx.output$getValue(xx)
         gamma.0[realized.idx.0] = - result[1:num.realized.0] / sigma.sq / 2
         gamma.1[realized.idx.1] = - result[num.realized.0 + 1:num.realized.1] / sigma.sq / 2
         t.hat = result[num.realized.0 + num.realized.1 + 1] / (2 * max.second.derivative^2)

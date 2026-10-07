@@ -53,7 +53,7 @@ plot.optrdd = function(x, ...) {
         }
         args$x = NA; args$y = NA
         do.call(graphics::plot, args)
-        if (length (unique(all.x) > 40)) {
+        if (length(unique(all.x)) > 40) {
             graphics::points(x$gamma.fun.0, col = 4, pch = 16, cex = 1.5)
             graphics::points(x$gamma.fun.1, col = 2, pch = 16, cex = 1.5)
         } else {
